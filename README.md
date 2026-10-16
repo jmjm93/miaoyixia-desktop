@@ -4,7 +4,7 @@
 https://github.com/user-attachments/assets/05fee695-1976-482d-81fc-7a5cff07c02b
 
 
-Read Chinese anywhere on your screen, set a region to continually scan new sentences, or just do a one-time scan. Anki integration to easily create flashcards. Configurable. Also Japanese compatibility because why not.
+Read Chinese anywhere on your screen, set a region to continually scan new sentences, or just do a one-time scan. Anki integration to easily create flashcards. Configurable. Japanese has been added as well.
 
 Both for English and Spanish.
 
