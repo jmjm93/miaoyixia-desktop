@@ -225,9 +225,10 @@ class App(QObject):
 
     @Slot()
     def show_options(self) -> None:
-        dialog = OptionsDialog(self._next_language, self.window, self.user_language)
+        dialog = OptionsDialog(self._next_language, self.window, self.user_language, self.config)
         localize(dialog)
         if dialog.exec() == OptionsDialog.DialogCode.Accepted:
+            self._on_config_changed("")
             self.set_default_language(dialog.language)
             self.set_user_language(dialog.user_language)
         dialog.deleteLater()
@@ -521,6 +522,7 @@ class App(QObject):
             return
 
         old_watch = self.config.watch
+        old_anki = self.config.anki_for(getattr(self, "language", "zh"))
         old_language = self.config.session.language
         self.config = config
         if hasattr(self, "user_language") and config.session.user_language != self.user_language:
@@ -549,7 +551,7 @@ class App(QObject):
                                         self._rescan_hotkey.spec)
         self.engine.set_ignored_suffixes(config.watch.ignored_suffixes)
         anki_config = config.anki_for(getattr(self, "language", "zh"))
-        self.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
+        self.result.set_anki_enabled(anki_config.enabled, anki_config.deck, refresh=anki_config != old_anki)
         target = "es" if getattr(self, "user_language", "en") == "es" else "en"
         self.result.set_translation_enabled(config.translation.enabled, target)
         self._health_timer.setInterval(max(5, config.diagnostics.health_seconds) * 1000)

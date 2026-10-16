@@ -764,7 +764,7 @@ class ResultWindow(QWidget):
     # a widget. A bare lambda in the same place has no affinity to inspect and runs on the
     # worker instead; see App's docstring for what Windows does about that.
 
-    def set_anki_enabled(self, enabled: bool, deck: str = "") -> None:
+    def set_anki_enabled(self, enabled: bool, deck: str = "", refresh: bool = False) -> None:
         """Turn the add button on or off, and show the change straight away.
 
         Re-rendering matters because this is reached from a config reload, and a switch you have
@@ -772,7 +772,7 @@ class ResultWindow(QWidget):
         The candidate tab is carried over rather than reset -- the user picked it, and this is
         not their edit.
         """
-        if (enabled, deck) == (self._anki_enabled, self._anki_deck):
+        if not refresh and (enabled, deck) == (self._anki_enabled, self._anki_deck):
             return
         self._anki_enabled = enabled
         self._anki_deck = deck

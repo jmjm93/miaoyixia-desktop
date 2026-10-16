@@ -1,0 +1,38 @@
+name: Windows x64 release
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Create environment
+        run: |
+          python -m venv .venv
+          .venv\Scripts\python.exe -m pip install -r requirements-build.txt
+      - name: Install dictionaries
+        run: |
+          .venv\Scripts\python.exe tools/setup_japanese.py
+          if ($LASTEXITCODE) { throw 'Japanese dictionary setup failed' }
+          .venv\Scripts\python.exe tools/setup_spanish.py
+          if ($LASTEXITCODE) { throw 'Spanish dictionary setup failed' }
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: .venv\Scripts\python.exe -m pytest tests/ -q
+      - name: Build and verify executable
+        run: .\build-windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Miaoyixia-windows-x64
+          path: dist/Miaoyixia-windows-x64.zip
+          if-no-files-found: error

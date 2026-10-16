@@ -300,6 +300,22 @@ def write_defaults(path: Path | None = None) -> bool:
     return True
 
 
+def save_options(path: Path, sections: dict) -> None:
+    """Validate and atomically save edited sections, preserving all unrelated settings."""
+    raw = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    _validate(raw)
+    for name, values in sections.items():
+        raw[name] = _merge(raw.get(name, {}), values)
+    _validate(raw)
+    temporary = path.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(json.dumps(raw, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
 def remember_language(language: str, path: Path | None = None, user_language: str | None = None) -> bool:
     """Remember the picker selection without replacing any other user settings."""
     path = path or CONFIG_PATH

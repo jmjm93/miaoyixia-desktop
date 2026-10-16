@@ -1,6 +1,9 @@
 ﻿# 瞄一下
 
-Read Chinese and Japanese text anywhere on your Windows screen—games, visual novels, videos, manga, or documents. Select an area to see the text, word definitions, and pinyin or kana readings. You can also translate the text and save words with audio to Anki.
+
+Read Chinese anywhere on your screen, set a region to continually scan new sentences, or just do a one-time scan. Anki integration to easily create flashcards. Configurable. Also Japanese compatibility because why not.
+
+Both for English and Spanish.
 
 ## Setup
 
@@ -46,7 +49,7 @@ The app stays in the system tray when you close its main window. Choose **Quit**
 - **Manual mode:** click **A** in the result window to switch to **M**, then click Rescan or press **Ctrl+Shift+R** when you want a new reading. Click **M** to return to automatic mode.
 - **Definitions:** click a word to see its reading and meaning. Edit recognized text and press Enter to correct it.
 - **Translation:** use the translation icon in the result window to turn online translation on or off.
-- **Anki:** with Anki and AnkiConnect running, enable export in `config.json`, then click **+ Anki** beside a definition. Chinese uses the `anki` settings; Japanese uses `anki_japanese`.
+- **Anki:** open Options and select the Chinese or Japanese Anki tab to enable export and configure the deck, note type, fields, and audio. With Anki and AnkiConnect running, click **+ Anki** beside a definition.
 
 Additional settings, including the rescan hotkey and Anki deck, note type, and fields, are in **config.json**. Saved changes apply while the app is running.
 

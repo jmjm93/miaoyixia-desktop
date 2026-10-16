@@ -5,7 +5,7 @@ from pathlib import Path
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from PySide6.QtGui import QFont, QFontDatabase
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QTabWidget
 from app.options import OptionsDialog
 from app.result import ResultWindow
 from app.worker import Reading
@@ -25,6 +25,9 @@ localize(picker)
 picker.show()
 app.processEvents()
 picker.grab().save(str(directory / ("options-spanish.png" if spanish else "options.png")))
+picker.findChild(QTabWidget).setCurrentIndex(2)
+app.processEvents()
+picker.grab().save(str(directory / ("anki-options-spanish.png" if spanish else "anki-options.png")))
 window = ResultWindow("ja")
 window.set_anki_enabled(True)
 window.set_translation_enabled(True, "es" if spanish else "en")
