@@ -1,0 +1,7 @@
+{
+  "cedict_source": "https://raw.githubusercontent.com/jmjm93/cedict-translations/f6624002f668c5a42435016ebee11fd1527d3474",
+  "cedict_sha256": "6f19e941b8ac75917201f3ddd0973b12db3457f032119cf4e7b598fe3c8de2f6",
+  "entries": 122096,
+  "jmdict_source": "https://github.com/scriptin/jmdict-simplified/releases/download/3.6.2%2B20261005200550/jmdict-all-3.6.2%2B20261005200550.json.zip",
+  "jmdict_sha256": "badb329de1631de4e8fcf0e08f34eed95531e8024e719703106a2908e63c528b"
+}

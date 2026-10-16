@@ -1,0 +1,9 @@
+{
+  "source": "CC-CEDICT (https://cc-cedict.org/) - CC BY-SA 4.0",
+  "release": "2026-08-07T08:04:28Z",
+  "builtFrom": "cedict_ts.u8",
+  "shardCount": 128,
+  "entries": 124774,
+  "headwords": 197618,
+  "maxWordLength": 19
+}

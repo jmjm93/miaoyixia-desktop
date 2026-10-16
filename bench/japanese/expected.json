@@ -1,0 +1,28 @@
+{
+  "_note": "Synthetic printed controls; not real manga or game captures.",
+  "horizontal-conjugation": {
+    "text": "昨日ご飯を食べました。",
+    "script": "japanese",
+    "orientation": "horizontal"
+  },
+  "horizontal-compound": {
+    "text": "日本語を勉強しています。",
+    "script": "japanese",
+    "orientation": "horizontal"
+  },
+  "horizontal-kana": {
+    "text": "ありがとうございます",
+    "script": "japanese",
+    "orientation": "horizontal"
+  },
+  "horizontal-katakana": {
+    "text": "ゲームのキャラクター",
+    "script": "japanese",
+    "orientation": "horizontal"
+  },
+  "vertical-printed": {
+    "text": "日本語を読む",
+    "script": "japanese",
+    "orientation": "vertical"
+  }
+}
