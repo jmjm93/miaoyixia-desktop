@@ -16,7 +16,7 @@ $env:QT_QPA_PLATFORM = $previousPlatform
 if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $report)) { throw 'Packaged self-test failed.' }
 $result = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
 if (-not $result.ok) { throw 'Packaged self-test did not pass.' }
-Copy-Item -LiteralPath README.md, THIRD_PARTY_NOTICES.md -Destination dist\Miaoyixia
+Copy-Item -LiteralPath README.md, README.es.md, LICENSE, THIRD_PARTY_NOTICES.md -Destination dist\Miaoyixia
 Compress-Archive -Path dist\Miaoyixia -DestinationPath dist\Miaoyixia-windows-x64.zip -Force
 Get-FileHash -Algorithm SHA256 -LiteralPath dist\Miaoyixia-windows-x64.zip | Format-List
 Write-Host 'Ready: dist\Miaoyixia-windows-x64.zip'

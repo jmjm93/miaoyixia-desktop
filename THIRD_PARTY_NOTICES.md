@@ -1,5 +1,8 @@
 # Third-party components
 
+The project's original source code is released under the MIT License (see `LICENSE`).
+This does not replace the licenses of third-party components or dictionary data.
+
 Distributed builds include dependency licence texts and a version inventory in
 `_internal/third-party-licenses`. Those licences apply to their respective components.
 

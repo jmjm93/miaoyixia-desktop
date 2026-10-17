@@ -15,7 +15,8 @@ for relative in ('dict', 'spanish'):
     datas.append((str(root / 'data' / relative), 'data/' + relative))
 for name in ('jmdict-es.sqlite3', 'README.md', 'licence.html', 'meta.json'):
     datas.append((str(root / 'data/japanese' / name), 'data/japanese'))
-datas += [(str(root / 'README.md'), '.'), (str(root / 'THIRD_PARTY_NOTICES.md'), '.'),
+datas += [(str(root / 'README.md'), '.'), (str(root / 'README.es.md'), '.'),
+          (str(root / 'LICENSE'), '.'), (str(root / 'THIRD_PARTY_NOTICES.md'), '.'),
           (str(root / 'bench/japanese/horizontal-compound.png'), 'self-test'),
           (str(root / 'build/third-party-licenses'), 'third-party-licenses')]
 hidden = collect_submodules('rapidocr') + collect_submodules('fugashi') + ['unidic_lite', 'edge_tts']

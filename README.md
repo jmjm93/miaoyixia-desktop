@@ -1,6 +1,11 @@
 ﻿# 瞄一下
 
 
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](#running-from-source)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+
+English | [Español](README.es.md)
+
 Read Chinese anywhere on your screen, set a region to continually scan new sentences, or just do a one-time scan. Anki integration to easily create flashcards. Configurable. Also Japanese compatibility because why not.
 
 Both for English and Spanish.
@@ -59,3 +64,13 @@ To build the Windows release from source, install both dictionaries and run
 `powershell -ExecutionPolicy Bypass -File build-windows.ps1`. The ZIP is written to `dist`.
 GitHub Actions can also build it with **Windows x64 release → Run workflow**, or a `v*` tag;
 download the ZIP from that run's artifacts and attach it to your GitHub release.
+
+## License
+
+This project's original source code is released under the [MIT License](LICENSE).
+You may use, modify, distribute, and sell it, including in closed-source projects,
+provided you retain the copyright and license notice in copies or substantial
+portions of the software. This applies to both commercial and noncommercial
+distribution; publishing your changes is not required. The software is provided without warranty.
+Third-party components and dictionary data have their own licenses; see
+[Third-party notices](THIRD_PARTY_NOTICES.md) for details.
