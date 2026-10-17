@@ -501,8 +501,10 @@ class App(QObject):
 
     @Slot(str)
     def _on_config_directory_changed(self, _path: str) -> None:
-        if str(self.config.path) not in self._config_watcher.files():
-            self._config_timer.start()
+        # A directory notification can arrive before Qt removes a deleted or
+        # replaced file from files(), especially on Windows. Do not discard that
+        # notification based on a watch list that may still describe the old file.
+        self._config_timer.start()
 
     @Slot(str)
     def _on_config_changed(self, _path: str) -> None:
