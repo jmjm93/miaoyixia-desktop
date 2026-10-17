@@ -1,10 +1,13 @@
-﻿# 瞄一下
+<h1 align="center">瞄一下</h1>
 
+<p align="center">
+  <a href="#running-from-source"><img src="https://img.shields.io/badge/Python-3.11-3776AB?logo=python&amp;logoColor=white" alt="Python 3.11"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
 
-[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](#running-from-source)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-
-English | [Español](README.es.md)
+<p align="center">
+  English | <a href="README.es.md">Español</a>
+</p>
 
 https://github.com/user-attachments/assets/05fee695-1976-482d-81fc-7a5cff07c02b
 
