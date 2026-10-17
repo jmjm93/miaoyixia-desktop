@@ -7,7 +7,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEventLoop, QObject, QTimer
+from PySide6.QtCore import QCoreApplication, QEvent, QEventLoop, QObject, QTimer
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -17,11 +17,18 @@ from core.config import load
 
 def wait_until(predicate, description):
     loop = QEventLoop()
-    poll = QTimer()
+    poll = QTimer(loop)
+    timeout = QTimer(loop)
+    timeout.setSingleShot(True)
+    timeout.timeout.connect(loop.quit)
     poll.timeout.connect(lambda: predicate() and loop.quit())
     poll.start(10)
-    QTimer.singleShot(2000, loop.quit)
-    loop.exec()
+    timeout.start(2000)
+    try:
+        loop.exec()
+    finally:
+        poll.stop()
+        timeout.stop()
     assert predicate(), f"Timed out waiting for {description}"
 
 
@@ -82,7 +89,7 @@ def test_live_config_survives_invalid_edits_deletion_and_atomic_replacement(tmp_
         app._config_timer.stop()
         app._health_timer.stop()
         app.deleteLater()
-        qt.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
 
 
 def test_atomic_replacement_retries_a_transient_windows_lock(tmp_path, monkeypatch):
@@ -144,4 +151,4 @@ def test_directory_notification_reloads_even_while_file_is_still_registered(tmp_
         app._config_timer.stop()
         app._health_timer.stop()
         app.deleteLater()
-        qt.processEvents()
+        QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
