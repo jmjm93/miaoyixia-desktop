@@ -28,7 +28,12 @@ jobs:
       - name: Tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .venv\Scripts\python.exe -m pytest tests/ -q
+          PYTHONFAULTHANDLER: '1'
+        run: |
+          .venv\Scripts\python.exe -m pytest tests/ -q
+          $testExitCode = $LASTEXITCODE
+          Write-Host "Python/pytest exit code: $testExitCode"
+          exit $testExitCode
       - name: Build and verify executable
         run: .\build-windows.ps1
       - uses: actions/upload-artifact@v4
