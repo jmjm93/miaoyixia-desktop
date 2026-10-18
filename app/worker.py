@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass
 
 from PIL import Image
+from app.region_area import RegionArea
+
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
 from core.languages import ocr_script, validate, warm as warm_language
@@ -38,7 +40,7 @@ class Reading:
     source: str = "snip"
     image: Image.Image | None = None
     session: int = 0
-    region: tuple[int, int, int, int] | None = None
+    region: RegionArea | None = None
     language: str = ""
     user_language: str = ""
 
@@ -52,7 +54,7 @@ class Engine(QObject):
 
     warmed = Signal(float)
     read_done = Signal(object)  # Reading
-    lookup_done = Signal(object)  # Reading, with no image involved
+    lookup_done = Signal(object, int)  # Reading, with no image involved
     failed = Signal(str)
     watch_finished = Signal()
     watch_failed = Signal(int, str)
@@ -106,7 +108,7 @@ class Engine(QObject):
 
     @Slot(object, object, str)
     def read(self, image: Image.Image, orientation: str | None = None, source: str = "snip",
-             session: int = 0, region=None) -> None:
+             session: int = 0, region: RegionArea | None = None) -> None:
         started = time.perf_counter()
         try:
             reading = self._engine().read(image, orientation=orientation)
@@ -148,8 +150,8 @@ class Engine(QObject):
         finally:
             self.watch_finished.emit()
 
-    @Slot(str)
-    def lookup(self, line: str, source="edit") -> None:
+    @Slot(str, int)
+    def lookup(self, line: str, region_id: int, source="edit") -> None:
         """Re-segment a line the user corrected by hand, with no re-snip.
 
         Per the extension, this is the highest-value interaction in the whole window: "recognition
@@ -174,12 +176,12 @@ class Engine(QObject):
                 source=source,
                 language=self.language,
                 user_language=self.user_language,
-            )
+            ), region_id
         )
 
     @Slot(str)
     def refresh_locale(self, line):
-        self.lookup(line, "locale")
+        self.lookup(line, -1, "locale")
 
 
 class EngineThread(QObject):
@@ -201,7 +203,7 @@ class EngineThread(QObject):
 
     #: image, orientation-or-None, source
     request_read = Signal(object, object, str)
-    request_lookup = Signal(str)
+    request_lookup = Signal(str, int)
     request_warm = Signal()
     request_watch = Signal(object)
     request_suffixes = Signal(object)
@@ -240,7 +242,7 @@ class EngineThread(QObject):
         self._watch_session = session
         self._pending_watch = None
 
-    def read_watch(self, image: Image.Image, session: int, region, orientation=None) -> None:
+    def read_watch(self, image: Image.Image, session: int, region: RegionArea, orientation=None) -> None:
         if session != self._watch_session:
             return
         request = (image, orientation, session, region)
@@ -258,8 +260,8 @@ class EngineThread(QObject):
             self._watch_busy = True
             self.request_watch.emit(request)
 
-    def lookup(self, line: str) -> None:
-        self.request_lookup.emit(line)
+    def lookup(self, line: str, id: int) -> None:
+        self.request_lookup.emit(line, id)
 
     def set_ignored_suffixes(self, suffixes) -> None:
         self.request_suffixes.emit(suffixes)

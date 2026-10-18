@@ -31,7 +31,7 @@ from app.anki import AnkiThread  # noqa: E402
 from app.hotkey import GlobalHotkey, HotkeyError  # noqa: E402
 from app.overlay import SnipOverlay  # noqa: E402
 from app.result import ResultWindow  # noqa: E402
-from app.region_border import REGION_COLOURS, RegionBorder  # noqa: E402
+from app.region_border import RegionBorder  # noqa: E402
 from app.watcher import WatcherThread  # noqa: E402
 from app import health  # noqa: E402
 from app.window import MainWindow, app_icon  # noqa: E402
@@ -41,6 +41,7 @@ from app.options import OptionsDialog  # noqa: E402
 from core.languages import LANGUAGES, validate  # noqa: E402
 from core.watch_text import dialogue_key  # noqa: E402
 from app.i18n import tr, localize, set_language as set_ui_language  # noqa: E402
+from app.region import Region
 from core import config as app_config  # noqa: E402
 
 HOTKEY = "ctrl+shift+space"
@@ -68,12 +69,8 @@ class App(QObject):
         self.qt = qt
         self.overlay: SnipOverlay | None = None
         self.frame: capture.Frame | None = None
-        self.region: tuple[int, int, int, int] | None = None
-
-        self.result = ResultWindow(self.language)
-        self.result.edited.connect(self._on_edited)
-        self.result.retry.connect(self._on_retry)
-        self.result.closed.connect(self._on_result_closed)
+        self.regions: list[Region] = [];
+        self._next_region_id: int = 0
 
         # Settings, such as they are: one JSON file beside the app, written out with the
         # defaults the first time so there is something to edit.
@@ -92,19 +89,12 @@ class App(QObject):
         self.anki.anki.added.connect(self.result.anki_added)
         self.anki.anki.failed.connect(self.result.anki_failed)
         self.anki.anki.unreachable.connect(self.result.anki_unreachable)
-        self.result.anki_inspect.connect(self._on_anki_inspect)
-        self.result.anki_add.connect(self._on_anki_add)
-        self.result.anki_browse.connect(self._on_anki_browse)
-        anki_config = self.config.anki_for(self.language)
-        self.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
+        
+        
 
         self.translation = TranslationThread("ja" if self.language == "ja" else "zh-CN")
         self.translation.worker.completed.connect(self.result.apply_translation)
-        self.result.translation_requested.connect(self._on_translation_requested)
-        self.result.translation_cancelled.connect(self.translation.cancel_pending)
-        self.result.set_translation_enabled(self.config.translation.enabled,
-                                            self._translation_target())
-
+        
         # Watched, not merely read once. Without this the only way to apply an edit is to quit
         # from the tray and launch again -- and launching again while the old copy is alive is a
         # no-op by design (see _claim_single_instance), so the obvious gesture, double-clicking
@@ -123,24 +113,8 @@ class App(QObject):
 
         #: True while the next selection should be pinned rather than read once.
         self._pin_next = False
-        #: The last line shown from a watched region. The authority on whether anything changed --
-        #: see watcher.py for why no pixel-level gate can answer that question.
-        self._watched_line: str | None = None
-        self._watch_session = 0
-        self._watch_active = False
-        self._region_mode = self.config.watch.mode
-        self.result.mode_changed.connect(self.set_region_mode)
-        self.result.rescan_requested.connect(self.rescan_region)
-        self.result.set_region_mode(self._region_mode, False, self.config.watch.rescan_hotkey)
+        
 
-        self.watcher = WatcherThread()
-        self.watcher.watcher.caught_session.connect(self._on_watch_frame)
-        self.watcher.watcher.state_session.connect(self._on_watch_state)
-
-        # The visible half of watching: a coloured frame on screen, and the same colour on the
-        # result window. One region for now, so one colour.
-        self.region_colour = REGION_COLOURS[0]
-        self.border = RegionBorder(self.region_colour)
 
         self.window = MainWindow(HOTKEY, WATCH_HOTKEY, self.border.colour, self.language)
         self.window.snip_requested.connect(self.start_snip)
@@ -432,14 +406,19 @@ class App(QObject):
         """
         QTimer.singleShot(120, self.start_snip)
 
-    @Slot(object)
-    def _on_reading(self, reading) -> None:
+    @Slot(object, int)
+    def _on_reading(self, reading, region_id) -> None:
+        region = next(
+            (region for region in self.regions if region.id == region_id), 
+            None, 
+            )
+        if(region is None): return
         if getattr(reading, "user_language", "") and reading.user_language != getattr(self, "user_language", "en"):
             return
         if getattr(reading, "language", "") and reading.language != self.language:
             return  # an earlier capture finished while a new language was being selected
         if reading.source == "locale":
-            self.result.set_tokens(reading.tokens, preserve=True)
+            region.result.set_tokens(reading.tokens, preserve=True)
             return
         self._counts[reading.source if reading.source in self._counts else "edit"] += 1
         if reading.source == "watch":
@@ -453,33 +432,22 @@ class App(QObject):
                 return
             self._watched_line = reading.line
             if not reading.line:
-                return  # the box emptied between lines; leave the last reading up
-
-            # Different is not the same as Chinese. The comparison above only proves the region
-            # says something new, so an English subtitle, a clock ticking over, or a textured
-            # panel the whole-crop fallback guessed at all get this far -- and each would replace
-            # a perfectly good reading with nothing worth reading. The last good line stays up
-            # instead, and _watched_line is still advanced so the same rejected text is not
-            # re-examined on every tick.
+                return  
             if not self.config.watch.accepts(reading.line, self.language):
                 return
 
-            # Neither focus nor position moves: the user is playing a game, and a window that
-            # grabbed focus or hopped about on every line of dialogue would be worse than useless.
-            self.result.show_capture(
+            region.result.show_capture(
                 reading.image, reading.region, activate=False, reposition=False
             )
             self.window.set_reading(reading.line)
-            self.result.show_reading(reading, append=True)
+            region.result.show_reading(reading, append=True)
             return
 
         self.window.set_reading(reading.line)
-        self.result.show_reading(reading)
+        region.result.show_reading(reading)
         if getattr(self, "_watch_active", False):
-            # The initial snip/corrected line already on screen is the watch baseline.
-            self._watched_line = reading.line
-        if self.region:
-            self.result._place(self.region)
+            region._watched_line = reading.line
+        region.result._place(region.rectangle)
 
     def _setup_config_watcher(self) -> None:
         self._config_watcher = QFileSystemWatcher(self)
@@ -490,6 +458,28 @@ class App(QObject):
         self._config_watcher.fileChanged.connect(lambda _path: self._config_timer.start())
         self._config_watcher.directoryChanged.connect(self._on_config_directory_changed)
         self._watch_config()
+
+    def _setup_new_region(self, region: Region) -> None:
+        anki_config = self.config.anki_for(self.language)
+        region.result.edited.connect(self._on_edited)
+        region.result.retry.connect(self._on_retry)
+        region.result.closed.connect(self._on_result_closed)
+        region.result.anki_inspect.connect(self._on_anki_inspect)
+        region.result.anki_add.connect(self._on_anki_add)
+        region.result.anki_browse.connect(self._on_anki_browse)
+        region.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
+        region.result.translation_requested.connect(self._on_translation_requested)
+        region.result.translation_cancelled.connect(self.translation.cancel_pending)
+        region.result.set_translation_enabled(self.config.translation.enabled,
+                                            self._translation_target())
+
+        region.result.mode_changed.connect(self.set_region_mode)
+        region.result.rescan_requested.connect(self.rescan_region)
+        region.result.set_region_mode(region._mode, False, self.config.watch.rescan_hotkey)
+        
+        region.watcher.watcher.caught_session.connect(self._on_watch_frame)
+        region.watcher.watcher.state_session.connect(self._on_watch_state)
+
 
     def _watch_config(self) -> None:
         path = str(self.config.path)
@@ -576,9 +566,9 @@ class App(QObject):
     def _on_anki_browse(self, ticket: int, index: int, card) -> None:
         self.anki.browse(ticket, index, self.config.anki_for(self.language), card)
 
-    @Slot(str)
-    def _on_edited(self, line: str) -> None:
-        self.engine.lookup(line)
+    @Slot(str, int)
+    def _on_edited(self, line: str, id: int) -> None:
+        self.engine.lookup(line, id)
 
     @Slot(float)
     def _on_warmed(self, ms: float) -> None:

@@ -11,6 +11,7 @@ from PIL import Image
 from PySide6.QtCore import QEventLoop, QObject, QTimer, Slot
 from PySide6.QtWidgets import QApplication
 
+from app.region_area import RegionArea
 from app.worker import EngineThread, Reading
 
 
@@ -20,7 +21,7 @@ def test_watch_backlog_keeps_only_the_latest_capture(failure, invalidate):
     entered, release = threading.Event(), threading.Event()
     calls, readings, errors = [], [], []
     images = [Image.new("RGB", (8, 8), (i, i, i)) for i in range(10)]
-    region = (1, 2, 8, 8)
+    region = RegionArea(1, 2, 8, 8)
 
     class FakeOCR:
         def read(self, image, orientation=None):
@@ -85,7 +86,7 @@ def test_stopping_discards_the_pending_watch_capture():
     try:
         worker._watch_busy = True
         worker.set_watch_session(1)
-        worker.read_watch(Image.new("RGB", (8, 8)), 1, (0, 0, 8, 8))
+        worker.read_watch(Image.new("RGB", (8, 8)), 1, RegionArea(0, 0, 8, 8))
         worker.set_watch_session(2)
         worker._watch_finished()
         assert worker._pending_watch is None
@@ -101,7 +102,7 @@ def test_watch_results_cannot_reopen_a_stopped_or_replaced_region(active, sessio
     from core.config import WatchConfig
 
     image = Image.new("RGB", (8, 8))
-    region = (1, 2, 8, 8)
+    region = RegionArea(1, 2, 8, 8)
     app = SimpleNamespace(language="zh", _counts={"watch": 0}, _watch_active=active, _watch_session=3,
                           _watched_line=None, config=SimpleNamespace(watch=WatchConfig(0.35)),
                           result=Mock(), window=Mock())

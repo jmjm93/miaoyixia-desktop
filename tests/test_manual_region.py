@@ -2,13 +2,14 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 import pytest
 from PIL import Image
+from app.region_area import RegionArea
 from app.main import App
 from core.config import WatchConfig, load
 
 
 def fake_app(mode="automatic", active=True):
     app = SimpleNamespace(_region_mode=mode, _watch_active=active, _watch_session=7,
-        region=(10, 20, 300, 80), overlay=None, watcher=Mock(), engine=Mock(), result=Mock(),
+        region=RegionArea(10, 20, 300, 80), overlay=None, watcher=Mock(), engine=Mock(), result=Mock(),
         config=SimpleNamespace(watch=WatchConfig(0.35)), _on_watch_state=Mock(), _on_failed=Mock())
     return app
 

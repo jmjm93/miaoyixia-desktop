@@ -9,6 +9,8 @@ Deliberately small and always reachable. It is a launcher, not a workspace -- ev
 interesting still happens in the overlay and the result window.
 """
 
+from app.region_area import RegionArea
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
@@ -176,13 +178,13 @@ class MainWindow(QWidget):
             self._status.setText(tr("Starting…"))
             self._status_hint.setText(tr(detail or "loading the dictionary and recogniser"))
 
-    def set_watching(self, watching: bool, region: tuple[int, int, int, int] | None = None) -> None:
+    def set_watching(self, watching: bool, region: RegionArea | None = None) -> None:
         self._watch.setChecked(watching)
         self._watch.setText(tr("  Stop watching" if watching else self._watch_idle_label))
         self._swatch_label.setVisible(watching)
         if watching:
             self._status.setText(tr("Watching a region"))
-            where = f"{region[2]}×{region[3]} at {region[0]}, {region[1]}" if region else ""
+            where = f"{region.width}×{region.height} at {region.x}, {region.y}" if region else ""
             self._status_hint.setText(
                 tr(f"{where} — re-read whenever the text changes" if where else "re-reading on change")
             )

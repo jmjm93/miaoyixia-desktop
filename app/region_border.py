@@ -14,15 +14,14 @@ Two properties make it liveable over a game:
   * frame only, no fill, so it never obscures the text it surrounds.
 """
 
+import random
+
+from app.region_area import RegionArea
+
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-#: Region colours, in the order they are handed out. Only the first is used today -- there is one
-#: watched region -- but the palette is the reason adding more is a small change rather than a
-#: redesign. Chosen to stay legible over game art: saturated, warm-to-cool, and none of them close
-#: to the greys and blues most UI chrome is made of.
-REGION_COLOURS = ("#FFB020", "#3FC7A1", "#FF6B8A", "#7C8CFF")
 
 #: Thickness of the outline. Thin enough not to cover anything, thick enough to see over artwork.
 BORDER_WIDTH = 3
@@ -34,10 +33,13 @@ BORDER_INSET = 2
 class RegionBorder(QWidget):
     """An always-on-top outline around one screen rectangle."""
 
-    def __init__(self, colour: str = REGION_COLOURS[0]):
+    def __init__(self, colour: str | None = None):
         super().__init__(None)
-        self._colour = QColor(colour)
-
+        if colour is not None:
+            self._colour = QColor(colour)
+        else: 
+            self._colour = QColor(RegionBorder.random_colour())
+        
         self.setWindowFlags(
             Qt.FramelessWindowHint
             | Qt.WindowStaysOnTopHint
@@ -53,9 +55,9 @@ class RegionBorder(QWidget):
     def colour(self) -> QColor:
         return self._colour
 
-    def set_region(self, rect: tuple[int, int, int, int]) -> None:
+    def set_region(self, rect: RegionArea) -> None:
         """Frame this rectangle, given in virtual-desktop coordinates."""
-        x, y, width, height = rect
+        x, y, width, height = rect.x, rect.y, rect.width, rect.height
         pad = BORDER_WIDTH + BORDER_INSET
         # The window is grown to sit *outside* the region, so the outline never covers the first
         # or last row of pixels the recogniser is going to read.
@@ -78,7 +80,13 @@ class RegionBorder(QWidget):
             QRect(half, half, self.width() - BORDER_WIDTH, self.height() - BORDER_WIDTH)
         )
 
-    def show_over(self, rect: tuple[int, int, int, int]) -> None:
+    def show_over(self, rect: RegionArea) -> None:
         self.set_region(rect)
         self.show()
         self.raise_()
+
+    @staticmethod
+    def random_colour() -> str:
+        hue = random.randrange(360)
+        colour = QColor.fromHsv(hue, 200, 255)
+        return colour.name()  # Hex string, e.g. "#ff8537"

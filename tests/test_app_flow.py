@@ -23,6 +23,7 @@ from PySide6.QtCore import QPoint, Qt  # noqa: E402
 from PySide6.QtGui import QMouseEvent  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from app.region_area import RegionArea
 from app.capture import Frame, Monitor  # noqa: E402
 from core import config as anki_config  # noqa: E402
 from app.overlay import MIN_SIZE, Selection, SnipOverlay  # noqa: E402
@@ -227,26 +228,26 @@ def _reading(line: str, **kw) -> Reading:
 
 def test_a_region_with_no_chinese_reads_empty_and_does_not_throw(qt, engine, frame):
     """The case the user hit. A blank crop is a normal outcome, not a failure."""
-    blank = frame.crop((-1900, 20, 300, 120))  # flat background, no text
+    blank = frame.crop(RegionArea(-1900, 20, 300, 120))  # flat background, no text
     reading = engine.read(blank)
     assert reading.text == ""
 
     window = ResultWindow()
-    window.show_capture(blank, (100, 100, 300, 120))
+    window.show_capture(blank, RegionArea(100, 100, 300, 120))
     window.show_reading(_reading(""))
     assert not window.grab().isNull()
 
 
 def test_the_window_paints_a_real_reading(qt):
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("倖存的居民皆已收容完畢", scores=(0.98, 0.99)))
     assert not window.grab().isNull()
 
 
 def test_the_window_opens_on_the_segmented_word_not_the_longest(qt):
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("研究生命起源"))
     token = window._tokens[0]
     assert token.text == "研究"
@@ -255,7 +256,7 @@ def test_the_window_opens_on_the_segmented_word_not_the_longest(qt):
 
 def test_switching_words_and_candidates_repaints(qt):
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("研究生命起源"))
 
     window.select_token(1)
@@ -286,7 +287,7 @@ def test_a_long_sentence_does_not_squeeze_its_chips_illegible(qt):
     actual claim: a chip is never narrower than the text inside it.
     """
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(
         _reading("倖存的居民皆已收容完畢請所有人員立即前往指定的避難所並保持安靜等待進一步指示")
     )
@@ -314,7 +315,7 @@ def test_a_snipped_paragraph_does_not_push_the_definitions_off_screen(qt):
     long_line = "倖存的居民皆已收容完畢請所有人員立即前往指定的避難所並保持安靜等待進一步指示" * 4
 
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading(long_line))
     window.show()
     qt.processEvents()
@@ -336,7 +337,7 @@ def test_a_snipped_paragraph_does_not_push_the_definitions_off_screen(qt):
 def _anki_window(qt, line="居民"):
     window = ResultWindow()
     window.set_anki_enabled(True, "Mandarin::Chinese Mining")
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading(line))
     window.show()
     qt.processEvents()
@@ -346,7 +347,7 @@ def _anki_window(qt, line="居民"):
 def test_no_anki_button_exists_until_the_config_enables_one(qt):
     """A button that cannot work is worse than no button, and the default config is off."""
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("居民"))
     qt.processEvents()
 
@@ -371,7 +372,7 @@ def test_asking_anki_happens_after_the_definitions_are_on_screen(qt):
     window = ResultWindow()
     window.set_anki_enabled(True, "Deck")
     window.anki_inspect.connect(lambda ticket, cards: asked.append((ticket, cards)))
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("居民"))
     qt.processEvents()
 
@@ -635,7 +636,7 @@ def test_engine_results_arrive_on_the_gui_thread(qt):
 
 def _ready_window(qt):
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     return window
 
 
@@ -731,10 +732,10 @@ def test_placement_does_not_depend_on_where_the_window_already_is(qt):
     Placing the same snip twice from different starting positions must give the same answer.
     """
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("虽然偶而也是会失败"))
 
-    rect = (120, 200, 400, 100)
+    rect = RegionArea(120, 200, 400, 100)
     first = _placed(window, rect)
 
     window.move(0, 0)
@@ -755,21 +756,21 @@ def test_the_window_never_lands_off_screen(qt):
     from PySide6.QtGui import QGuiApplication
 
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("虽然偶而也是会失败"))
 
     for screen in QGuiApplication.screens():
         area = screen.availableGeometry()
         corners = [
-            (area.left(), area.top(), 200, 60),
-            (area.right() - 200, area.top(), 200, 60),
-            (area.left(), area.bottom() - 60, 200, 60),
-            (area.right() - 200, area.bottom() - 60, 200, 60),
-            (area.center().x(), area.center().y(), 200, 60),
+            RegionArea(area.left(), area.top(), 200, 60),
+            RegionArea(area.right() - 200, area.top(), 200, 60),
+            RegionArea(area.left(), area.bottom() - 60, 200, 60),
+            RegionArea(area.right() - 200, area.bottom() - 60, 200, 60),
+            RegionArea(area.center().x(), area.center().y(), 200, 60),
         ]
         for rect in corners:
             geometry = _placed(window, rect)
-            centre = QPoint(rect[0] + rect[2] // 2, rect[1] + rect[3] // 2)
+            centre = QPoint(rect.x + rect.width // 2, rect.y + rect.height // 2)
             expected = QGuiApplication.screenAt(centre) or QGuiApplication.primaryScreen()
             assert expected.availableGeometry().contains(geometry), (
                 f"snip at {rect} put the window at {geometry}, outside {expected.name()}"
@@ -783,7 +784,7 @@ def test_enabling_anki_shows_the_button_without_waiting_for_the_next_snip(qt):
     does nothing -- which is exactly how the feature looked the first time it was turned on.
     """
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("研究生命起源"))
     qt.processEvents()
     assert window._anki_buttons == []
@@ -815,7 +816,7 @@ def test_the_transcript_stops_growing_instead_of_growing_forever(qt):
     from app.result import TRANSCRIPT_MAX_LINES
 
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     for i in range(TRANSCRIPT_MAX_LINES + 120):
         window.append_line(f"line {i} 居民")
 
@@ -856,7 +857,7 @@ def test_the_windows_counters_are_actually_readable_not_silently_zero(qt):
         pytest.skip("win32 counters")
 
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show()
     qt.processEvents()
 
@@ -1030,11 +1031,11 @@ def test_the_app_is_a_qobject_so_its_slots_have_thread_affinity():
 def test_a_second_snip_replaces_the_first(qt):
     """Widgets from the previous reading must be torn down, not stacked underneath."""
     window = ResultWindow()
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("研究生命起源"))
     first = window._chips.count()
 
-    window.show_capture(Image.new("RGB", (300, 80), "white"), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80), "white"), RegionArea(10, 10, 300, 80))
     window.show_reading(_reading("中国菜"))
     qt.processEvents()  # deleteLater runs on the event loop
 

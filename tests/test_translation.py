@@ -11,6 +11,7 @@ from PIL import Image
 from PySide6.QtCore import QEventLoop, QObject, QThread, QTimer, Slot
 from PySide6.QtWidgets import QApplication
 
+from app.region_area import RegionArea
 from app.result import ResultWindow
 from app.translation import TranslationThread
 from app.worker import Reading
@@ -114,7 +115,7 @@ def test_watch_tail_noise_preserves_selected_word_and_candidate(qt):
         candidate = len(window._tokens[index].candidates) - 1
         window._show_candidates(window._tokens[index], candidate)
         headword = window._tokens[index].candidates[candidate].headword
-        window.show_capture(image, (0, 0, 100, 50), activate=False, reposition=False)
+        window.show_capture(image, RegionArea(0, 0, 100, 50), activate=False, reposition=False)
         window.show_reading(reading(sentence + "X"), append=True)
         assert window._tokens[window._active].text == "学校"
         assert window._tokens[window._active].candidates[window._candidate].headword == headword
@@ -231,7 +232,7 @@ def test_panel_requests_whole_text_and_ignores_stale_replies(qt):
     requests = []
     window.translation_requested.connect(lambda *args: requests.append(args))
     window.set_translation_enabled(True)
-    window.show_capture(Image.new("RGB", (300, 80)), (10, 10, 300, 80))
+    window.show_capture(Image.new("RGB", (300, 80)), RegionArea(10, 10, 300, 80))
     window.show_reading(reading("你好世界"))
     ticket = requests[-1][0]
     assert requests[-1][1] == "你好世界"

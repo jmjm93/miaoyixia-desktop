@@ -17,6 +17,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from app.region_area import RegionArea
 from app import watcher as watcher_mod  # noqa: E402
 from app.capture import ink_mask, mask_distance  # noqa: E402
 from app.watcher import IDENTICAL, SETTLE_TICKS, SETTLING_DISTANCE, Watcher  # noqa: E402
@@ -98,7 +99,7 @@ def test_a_static_region_reports_once_and_then_stays_quiet(qt, fake_screen):
     watcher = Watcher()
     caught = []
     watcher.caught.connect(caught.append)
-    watcher.start((0, 0, 400, 80))
+    watcher.start(RegionArea(0, 0, 400, 80))
 
     _run(watcher, SETTLE_TICKS + 1)
     assert len(caught) == 1, "a settled region should be read exactly once"
@@ -111,7 +112,7 @@ def test_new_text_is_reported(qt, fake_screen):
     watcher = Watcher()
     caught = []
     watcher.caught.connect(caught.append)
-    watcher.start((0, 0, 400, 80))
+    watcher.start(RegionArea(0, 0, 400, 80))
     _run(watcher, SETTLE_TICKS + 1)
     assert len(caught) == 1
 
@@ -125,7 +126,7 @@ def test_a_region_that_never_settles_is_never_read(qt, fake_screen):
     watcher = Watcher()
     caught = []
     watcher.caught.connect(caught.append)
-    watcher.start((0, 0, 400, 80))
+    watcher.start(RegionArea(0, 0, 400, 80))
 
     for i in range(12):
         fake_screen["image"] = _text_image((255, 255, 255), (20, 20, 24), offset=i * 3)
@@ -139,7 +140,7 @@ def test_the_rate_limit_bounds_the_animated_case(qt, fake_screen, monkeypatch):
     watcher = Watcher()
     caught = []
     watcher.caught.connect(caught.append)
-    watcher.start((0, 0, 400, 80))
+    watcher.start(RegionArea(0, 0, 400, 80))
 
     monkeypatch.setattr(watcher_mod, "MIN_OCR_GAP_MS", 10_000)
     for i in range(6):
@@ -154,7 +155,7 @@ def test_stopping_clears_state(qt, fake_screen):
     watcher = Watcher()
     caught = []
     watcher.caught.connect(caught.append)
-    watcher.start((0, 0, 400, 80))
+    watcher.start(RegionArea(0, 0, 400, 80))
     _run(watcher, SETTLE_TICKS + 1)
     assert watcher.watching
 

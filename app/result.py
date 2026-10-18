@@ -44,6 +44,8 @@ from PySide6.QtWidgets import (
 from app.flow_layout import wrap_in_flow
 from core.reading import Token
 
+from app.region_area import RegionArea
+
 SHOT_MAX_HEIGHT = 260
 #: The transcript grows between these before it starts scrolling. The floor is three-ish lines,
 #: so a stream of subtitles shows some history rather than one line at a time.
@@ -181,7 +183,7 @@ class ResultWindow(QWidget):
     """One window per snip, reused across snips."""
 
     #: The user corrected the recognised line; look the corrected text up instead.
-    edited = Signal(str)
+    edited = Signal(str, int)
     #: Close and go straight back to framing -- the usual answer to a capture that read badly.
     retry = Signal()
     #: Dismissed on purpose, by the close button or Escape. Distinct from hide(), which the retry
@@ -199,9 +201,10 @@ class ResultWindow(QWidget):
     mode_changed = Signal(str)
     rescan_requested = Signal()
 
-    def __init__(self, language: str = "zh"):
+    def __init__(self, id: int, language: str = "zh"):
         super().__init__(None)
         from core.languages import validate
+        self.id = id;
         self.language = validate(language)
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_ShowWithoutActivating, False)
@@ -459,7 +462,7 @@ class ResultWindow(QWidget):
     def show_capture(
         self,
         image,
-        near: tuple[int, int, int, int],
+        near: RegionArea,
         activate: bool = True,
         reposition: bool = True,
     ) -> None:
@@ -505,7 +508,7 @@ class ResultWindow(QWidget):
         if activate:
             self.raise_()
 
-    def _place(self, near: tuple[int, int, int, int]) -> None:
+    def _place(self, near: RegionArea) -> None:
         """Below the snipped region, flipping above when there is no room.
 
         The rule is the extension's popup rule, for its reason: the window must not cover the
@@ -521,8 +524,7 @@ class ResultWindow(QWidget):
         top cut off: definitions showing, capture and recognised line clipped away above the
         screen edge.
         """
-        x, y, w, h = near
-        centre = QPoint(x + w // 2, y + h // 2)
+        centre = QPoint(near.x + near.width // 2, near.y + near.height // 2)
         screen = QGuiApplication.screenAt(centre) or QGuiApplication.primaryScreen()
         area = screen.availableGeometry()
 
@@ -530,9 +532,9 @@ class ResultWindow(QWidget):
         self.adjustSize()
         size = self.size()
 
-        top = y + h + EDGE
+        top = near.y + near.height + EDGE
         if top + size.height() > area.bottom():
-            flipped = y - EDGE - size.height()
+            flipped = near.y - EDGE - size.height()
             if flipped >= area.top():
                 top = flipped
 
@@ -540,7 +542,7 @@ class ResultWindow(QWidget):
         # negotiable; which side of the snip it lands on is. A window taller than the display
         # pins to the top, so the capture and the line stay visible and the definitions scroll.
         top = max(area.top(), min(top, area.bottom() - size.height() + 1))
-        left = max(area.left(), min(x, area.right() - size.width() + 1))
+        left = max(area.left(), min(near.x, area.right() - size.width() + 1))
         self.move(int(left), int(top))
         self._keep_actions_in_corner()
 
@@ -968,7 +970,7 @@ class ResultWindow(QWidget):
     def _commit(self) -> None:
         text = self.current_line()
         if text:
-            self.edited.emit(text)
+            self.edited.emit(text, self.id)
 
     def _fit_log(self) -> None:
         """Grow with the transcript, up to a cap, then scroll.

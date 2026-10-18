@@ -19,6 +19,8 @@ import hashlib
 import threading
 from dataclasses import dataclass
 
+from app.region_area import RegionArea
+
 import mss
 import numpy as np
 from PIL import Image
@@ -75,12 +77,12 @@ class Frame:
         """
         return any(m.contains(x, y) for m in self.monitors)
 
-    def crop(self, rect: tuple[int, int, int, int]) -> Image.Image:
+    def crop(self, rect: RegionArea) -> Image.Image:
         """Cut a virtual-coordinate rectangle (x, y, w, h) out as an RGB image.
 
         This is where BGRA becomes RGB, on the crop alone.
         """
-        x, y, width, height = rect
+        x, y, width, height = rect.x, rect.y, rect.width, rect.height
         left = x - self.origin[0]
         top = y - self.origin[1]
         # Clamped rather than trusted: a drag can finish outside the frame if a display is
@@ -154,7 +156,7 @@ def release_capture() -> None:
         instance.close()
 
 
-def grab_region(rect: tuple[int, int, int, int]) -> Image.Image:
+def grab_region(rect: RegionArea) -> Image.Image:
     """One rectangle of the screen, live, as RGB. For the pinned watcher.
 
     Measured at ~16.6ms whatever the size, which is exactly one frame at 60Hz -- and the larger
@@ -166,7 +168,7 @@ def grab_region(rect: tuple[int, int, int, int]) -> Image.Image:
     which is event-driven and returns nothing at all while the screen is static -- letting the OS
     do the change detection instead of polling and hashing.
     """
-    x, y, width, height = rect
+    x, y, width, height = rect.x, rect.y, rect.width, rect.height
     shot = _sct().grab({"left": x, "top": y, "width": max(1, width), "height": max(1, height)})
     whole = np.frombuffer(shot.bgra, dtype=np.uint8).reshape(shot.height, shot.width, 4)
     return Image.fromarray(np.ascontiguousarray(whole[:, :, 2::-1]))

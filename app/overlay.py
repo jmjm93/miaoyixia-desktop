@@ -22,6 +22,8 @@ What the desktop changes:
 
 from dataclasses import dataclass
 
+from app.region_area import RegionArea
+
 from PySide6.QtCore import QPoint, QRect, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QImage, QPainter, QPen, QRegion
 from PySide6.QtWidgets import QWidget
@@ -58,8 +60,8 @@ class Selection:
     height: int
 
     @property
-    def rect(self) -> tuple[int, int, int, int]:
-        return (self.x, self.y, self.width, self.height)
+    def rect(self) -> RegionArea:
+        return RegionArea(self.x, self.y, self.width, self.height)
 
 
 class SnipOverlay(QWidget):

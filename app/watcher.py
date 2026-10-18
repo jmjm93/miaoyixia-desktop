@@ -29,6 +29,8 @@ cadence. MIN_OCR_GAP_MS bounds the bad case.
 
 import time
 
+from app.region_area import RegionArea
+
 from PySide6.QtCore import QObject, QThread, QTimer, Signal, Slot
 
 from .capture import grab_region, ink_mask, mask_distance, release_capture
@@ -105,7 +107,7 @@ class Watcher(QObject):
     def __init__(self):
         super().__init__()
         self._timer: QTimer | None = None
-        self._region: tuple[int, int, int, int] | None = None
+        self._region: RegionArea | None = None
         #: Edge mask of the previous tick, to tell whether anything is moving.
         self._previous = None
         #: Edge mask as it stood when the region was last handed on for recognition.
@@ -115,7 +117,7 @@ class Watcher(QObject):
         self._session = 0
 
     @Slot(object, int, int)
-    def start(self, region: tuple[int, int, int, int], interval_ms: int = DEFAULT_INTERVAL_MS,
+    def start(self, region: RegionArea, interval_ms: int = DEFAULT_INTERVAL_MS,
               session: int = 0) -> None:
         # The timer is created here rather than in __init__ so it belongs to this thread. A QTimer
         # created on the GUI thread and started from another one never fires.
@@ -215,7 +217,7 @@ class WatcherThread(QObject):
 
         self.thread.start()
 
-    def start(self, region: tuple[int, int, int, int], interval_ms: int = DEFAULT_INTERVAL_MS,
+    def start(self, region: RegionArea, interval_ms: int = DEFAULT_INTERVAL_MS,
               session: int = 0) -> None:
         self.request_start.emit(region, interval_ms, session)
 
