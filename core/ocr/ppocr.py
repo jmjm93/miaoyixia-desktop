@@ -228,12 +228,42 @@ class PPOCR:
 
     def _raw(self, image) -> list[Line]:
         result = self._engine(image)
-        if result is None or result.boxes is None:
-            return []
-        return [
+        lines = [] if result is None or result.boxes is None else [
             Line(text=text, score=float(score), box=np.asarray(box, dtype=float))
             for box, text, score in zip(result.boxes, result.txts, result.scores)
         ]
+        # RapidOCR filters empty recognitions out of its output. A vertical column
+        # containing an upright number can disappear even though detection succeeded.
+        use_rec, use_cls = self._engine.use_rec, self._engine.use_cls
+        try:
+            detected = self._engine(image, use_rec=False, use_cls=False)
+        finally:
+            self._engine.use_rec, self._engine.use_cls = use_rec, use_cls
+        boxes = [] if detected.boxes is None else detected.boxes
+        pixels = None
+        for box in boxes:
+            candidate = Line("", 0.0, np.asarray(box, dtype=float))
+            if candidate.height / max(candidate.width, 1) < 3:
+                continue
+            if any(abs(line.cx - candidate.cx) < candidate.width * .5
+                   and abs(line.cy - candidate.cy) < candidate.height * .5 for line in lines):
+                continue
+            if pixels is None:
+                pixels = _as_array(image)
+            left, right = candidate.x0, candidate.x1
+            for other in boxes:
+                cx = float(np.mean(other[:, 0]))
+                if cx < candidate.cx:
+                    left = max(left, (cx + candidate.cx) / 2)
+                elif cx > candidate.cx:
+                    right = min(right, (cx + candidate.cx) / 2)
+            strip = _reflow_vertical(pixels[int(candidate.y0):int(candidate.y1),
+                                             int(left):int(right)])
+            if strip is not None:
+                recovered = self._whole_crop()(strip)
+                if recovered.txts and recovered.scores[0] >= self._engine.text_score:
+                    lines.append(Line(recovered.txts[0], float(recovered.scores[0]), candidate.box))
+        return lines
 
     def _whole_crop(self):
         """A second pipeline with the detector switched off. Built on first need."""
@@ -333,3 +363,34 @@ def _as_array(image):
     if isinstance(image, Image.Image):
         return np.asarray(image.convert("RGB"))
     return np.asarray(Image.open(image).convert("RGB"))
+
+
+def _reflow_vertical(pixels):
+    """Lay upright ink bands left-to-right, keeping inline numbers together."""
+    import cv2
+
+    if not pixels.size:
+        return None
+    rows = np.flatnonzero((pixels.min(axis=2) < 100).any(axis=1))
+    bands = list(np.split(rows, np.where(np.diff(rows) > 1)[0] + 1))
+    if not rows.size or len(bands) < 3:
+        return None
+    height = median(b[-1] - b[0] + 1 for b in bands)
+    merged = []
+    i = 0
+    while i < len(bands):
+        band = bands[i]
+        # Keep disconnected strokes of a single glyph (e.g. 示) together.
+        while (band[-1] - band[0] + 1 < height * .65 and i + 1 < len(bands)
+               and bands[i + 1][-1] - band[0] + 1 <= height * 1.25):
+            i += 1
+            band = np.concatenate((band, bands[i]))
+        merged.append(band)
+        i += 1
+    parts = []
+    for band in merged:
+        part = pixels[band[0]:band[-1] + 1]
+        cols = np.flatnonzero((part.min(axis=2) < 100).any(axis=0))
+        part = part[:, cols[0]:cols[-1] + 1]
+        parts.append(cv2.resize(part, (max(1, round(part.shape[1] * 40 / part.shape[0])), 40)))
+    return np.concatenate(parts, axis=1)

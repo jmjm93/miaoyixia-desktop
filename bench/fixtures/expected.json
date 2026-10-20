@@ -183,5 +183,12 @@
     "straight": true,
     "note": "A WHOLE SCREEN, NOT A SNIP. Every other fixture is a region the user framed; this is 2560x1393 of unframed game, and it exists to test DETECTION rather than recognition -- can the engine find the text among characters, furniture, plants, a lantern and a floor of flagstones? Measured: exactly three boxes, all of them real (the 自动 button, the speaker name, the line), and nothing invented. The three icon-only buttons beside 自动 are correctly ignored, having no text. That is the direct counterpart to noisy-background-bubble, where Tesseract's connected-component search turned line art into a dozen invented characters. CER is scored here but is the lesser half of the point; a regression would more likely show up as extra boxes than as wrong ones. Reading order is plain row-major top-to-bottom, which happens to be right here and would not be for a screen with side-by-side panels. Also the slowest fixture by far at ~1.8s, because nothing has cropped it -- which is the argument for the pinned-live-region mode cropping to its rectangle before reading rather than re-reading the screen.",
     "bottom_cropped": "UID removed by the capturer, so the frame is slightly shorter than the display"
+  },
+  "vertical-text-with-horizontal-number": {
+    "text": "對了，現在最新的顯示卡是298喔～",
+    "script": "traditional",
+    "orientation": "vertical",
+    "columns": 2,
+    "note": "Vertical Chinese with an upright horizontal number. Detection finds both columns but recognition drops the left column. Reflowing ink bands recovers it and keeps 298 together. Known remaining error: the trailing wave dash is omitted."
   }
 }
