@@ -185,7 +185,7 @@ class ResultWindow(QWidget):
     #: The user corrected the recognised line; look the corrected text up instead.
     edited = Signal(str, int)
     #: Close and go straight back to framing -- the usual answer to a capture that read badly.
-    retry = Signal()
+    retry = Signal(int)
     #: Dismissed on purpose, by the close button or Escape. Distinct from hide(), which the retry
     #: path also uses: this one means "I am done", and a watched region should stop watching.
     closed = Signal()
@@ -1056,7 +1056,7 @@ class ResultWindow(QWidget):
     def _retry(self) -> None:
         self.hide()
         self._invalidate_translation()
-        self.retry.emit()
+        self.retry.emit(self.id)
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)

@@ -76,6 +76,8 @@ def test_old_language_result_cannot_replace_new_capture():
 def test_worker_language_change_is_queued_before_new_capture(qt, monkeypatch):
     import app.worker as module
     worker = EngineThread("ja")
+    # These tests do not need a real region's widgets or watcher thread.
+    region = SimpleNamespace(id=0, rectangle=None, _watch_session=0)
     calls, readings = [], []
     monkeypatch.setattr(module, "read_line", lambda line, language: calls.append(language) or [])
     worker.engine._engine = lambda: SimpleNamespace(read=lambda *a, **k: SimpleNamespace(
@@ -87,9 +89,9 @@ def test_worker_language_change_is_queued_before_new_capture(qt, monkeypatch):
     timeout.setSingleShot(True)
     timeout.timeout.connect(loop.quit)
     try:
-        worker.read("first")
+        worker.read("first", region)
         worker.set_language("zh")
-        worker.read("second")
+        worker.read("second", region)
         poll.start(10)
         timeout.start(2000)
         loop.exec()

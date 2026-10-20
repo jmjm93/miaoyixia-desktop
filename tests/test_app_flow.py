@@ -584,6 +584,7 @@ def test_engine_results_arrive_on_the_gui_thread(qt):
     from PySide6.QtCore import QEventLoop, QObject, QThread, QTimer, Slot
 
     from app.worker import EngineThread
+    from types import SimpleNamespace
 
     main_thread = QThread.currentThread()
 
@@ -621,7 +622,8 @@ def test_engine_results_arrive_on_the_gui_thread(qt):
 
     QTimer.singleShot(60_000, loop.quit)  # never hang the suite
 
-    engine.read(Image.new("RGB", (120, 48), "white"), None)
+    region = SimpleNamespace(id=0, rectangle=None, _watch_session=0)
+    engine.read(Image.new("RGB", (120, 48), "white"), region, orientation=None)
     loop.exec()
     engine.stop()
 

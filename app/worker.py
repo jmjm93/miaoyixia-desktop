@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from PIL import Image
 from app.region_area import RegionArea
+from app.region import Region
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
@@ -22,6 +23,7 @@ from core.languages import ocr_script, validate, warm as warm_language
 from core.ocr.ppocr import PPOCR
 from core.reading import Token, read_line
 from core.watch_text import dialogue_key
+
 
 
 @dataclass(frozen=True)
@@ -234,13 +236,13 @@ class EngineThread(QObject):
         self.thread.start()
 
     # Thin wrappers so callers cannot accidentally reach past them to the slots.
-    def read(self, image: Image.Image, orientation: str | None = None, source: str = "snip") -> None:
+    def read(self, image: Image.Image, region: Region, orientation: str | None = None, source: str = "snip") -> None:
         self.request_read.emit(image, orientation, source)
 
     def set_watch_session(self, session: int) -> None:
         """Invalidate queued captures when a region is stopped or replaced."""
-        self._watch_session = session
-        self._pending_watch = None
+        region._watch_session = session
+        region._pending_watch = None
 
     def read_watch(self, image: Image.Image, session: int, region: RegionArea, orientation=None) -> None:
         if session != self._watch_session:

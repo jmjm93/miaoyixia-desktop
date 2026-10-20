@@ -41,7 +41,7 @@ from app.options import OptionsDialog  # noqa: E402
 from core.languages import LANGUAGES, validate  # noqa: E402
 from core.watch_text import dialogue_key  # noqa: E402
 from app.i18n import tr, localize, set_language as set_ui_language  # noqa: E402
-from app.region import Region
+from app.region import Region, RegionMode
 from core import config as app_config  # noqa: E402
 
 HOTKEY = "ctrl+shift+space"
@@ -71,6 +71,9 @@ class App(QObject):
         self.frame: capture.Frame | None = None
         self.regions: list[Region] = [];
         self._next_region_id: int = 0
+
+        self._reframe_region_id: int | None = None
+        self._reframe_was_active = False
 
         # Settings, such as they are: one JSON file beside the app, written out with the
         # defaults the first time so there is something to edit.
@@ -235,20 +238,43 @@ class App(QObject):
         if not app_config.remember_language(language, self.config.path):
             log("could not save the preferred language; applies until the app exits")
 
-    def _apply_capture_language(self) -> None:
+    def _apply_capture_language(self, region: Region) -> None:
         if self.language == self._next_language:
             return
         self.language = self._next_language
         self.engine.set_language(self.language)
         self.translation.set_language(self.language)
-        self.result.set_language(self.language)
+        region.result.set_language(self.language)
         anki_config = self.config.anki_for(self.language)
-        self.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
+        region.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
 
     @Slot()
     def start_snip(self) -> None:
         if self.overlay is not None:
             return  # already framing
+        if self._reframe_region_id is not None:
+            region = next(
+                (region for region in self.regions if region.id == self._reframe_region_id),
+                None,
+            )
+            if region is None:
+                self._reframe_region_id = None
+                self._reframe_was_active = False
+                return
+
+            # Remember the state before pausing only the region being reframed.
+            self._reframe_was_active = region._watch_active
+            region._watch_active = False
+            region.watcher.stop()
+            region.border.hide()
+            self.qt.processEvents()
+            self.frame = capture.grab()
+            self.overlay = SnipOverlay(self.frame)
+            self.overlay.chosen.connect(self._on_chosen)
+            self.overlay.cancelled.connect(self._on_cancelled)
+            self.overlay.start()
+            return
+
         self._stop_watch()
 
         # Freeze first, then show the overlay over that still. The reverse order would put the
@@ -275,29 +301,56 @@ class App(QObject):
         self._pin_next = True
         self.start_snip()
 
+    # snip/resnip selected
     @Slot(object)
     def _on_chosen(self, selection) -> None:
+        reframe_id = self._reframe_region_id
+        was_active = self._reframe_was_active
+        pin_next = self._pin_next
         self.overlay = None
-        self._apply_capture_language()
-        self.region = selection.rect
+        self._reframe_region_id = None
+        self._reframe_was_active = False
+        self._pin_next = False
 
-        crop = self.frame.crop(selection.rect)
-        if not self._pin_next:
-            self.result.set_region_colour(None)
+        if reframe_id is None:
+            region = self._create_new_region(selection.rect)
+            was_active = pin_next
+        else:
+            region = next(
+                (region for region in self.regions if region.id == reframe_id),
+                None,
+        )
+        if region is None:
+            return
+
+        self._apply_capture_language(region)
+        region.rectangle = selection.rect
+        region._watched_line = None
+        region._watch_session += 1
+        region._watch_active = was_active
+
+        crop = self.frame.crop(region.rectangle)
+        region.result.set_region_colour(region.colour)
         # On screen straight away, before anything has been recognised.
-        self.result.show_capture(crop, selection.rect)
-        self.engine.read(crop, None)
+        region.result.show_capture(crop, region.rectangle)
+        self.engine.read(crop, region, None)
 
-        if self._pin_next:
-            self._pin_next = False
-            self._watched_line = None
-            self._watch_session += 1
-            self._watch_active = True
-            self.engine.set_watch_session(self._watch_session)
-            if self._region_mode == "automatic":
-                self.watcher.start(selection.rect, session=self._watch_session)
-            else:
-                self._on_watch_state(self._watch_session, True)
+        region.result.set_region_mode(
+            region._mode, was_active, self.config.watch.rescan_hotkey,
+        )
+        if was_active:
+            region.border.show_over(region.rectangle)
+            self.engine.set_watch_session(region._watch_session)
+            if region._mode == RegionMode.AUTOMATIC:
+                region.watcher.start(region.rectangle, session=region._watch_session)
+
+    def _create_new_region(self, rect)  -> Region:
+        region = Region(self._next_region_id, rect, RegionBorder.random_colour(), RegionMode(self.config.watch.mode))
+        self._next_region_id = self._next_region_id + 1
+        self.regions.append(region)
+        self._setup_new_region(region)
+        return region
+
 
     @Slot(int, object)
     def _on_watch_frame(self, session: int, image) -> None:
@@ -382,10 +435,29 @@ class App(QObject):
         else:
             self.pin_region()
 
+    # snip/resnip canceled somehow
     @Slot()
     def _on_cancelled(self) -> None:
+        reframe_id = self._reframe_region_id
+        was_active = self._reframe_was_active
         self.overlay = None
         self._pin_next = False
+        self._reframe_region_id = None
+        self._reframe_was_active = False
+        if reframe_id is None:
+            return
+        region = next(
+            (region for region in self.regions if region.id == reframe_id),
+            None,
+        )
+        if region is None:
+            return
+        region._watch_active = was_active
+        region.result.show()
+        if was_active:
+            region.border.show_over(region.rectangle)
+            if region._mode == RegionMode.AUTOMATIC:
+                region.watcher.start(region.rectangle, session=region._watch_session)
 
     @Slot()
     def _on_result_closed(self) -> None:
@@ -397,13 +469,12 @@ class App(QObject):
         """
         self._stop_watch()
 
-    @Slot()
-    def _on_retry(self) -> None:
-        """Reframe. Deferred by a beat, so the window is really gone before the screen freezes.
-
-        hide() only queues the compositor work; grabbing immediately would capture the result
-        window sitting on top of the very thing the user is trying to re-snip.
-        """
+    @Slot(int)
+    def _on_retry(self, id_region: int) -> None:
+        if self.overlay is not None or self._reframe_region_id is not None:
+            return
+        # snipping again a region
+        self._reframe_region_id = id_region
         QTimer.singleShot(120, self.start_snip)
 
     @Slot(object, int)
@@ -461,8 +532,8 @@ class App(QObject):
 
     def _setup_new_region(self, region: Region) -> None:
         anki_config = self.config.anki_for(self.language)
-        region.result.edited.connect(self._on_edited)
-        region.result.retry.connect(self._on_retry)
+        region.result.edited.connect(self._on_edited) # user edited manually the OCR result
+        region.result.retry.connect(self._on_retry)  # resnip: redo the rectangle
         region.result.closed.connect(self._on_result_closed)
         region.result.anki_inspect.connect(self._on_anki_inspect)
         region.result.anki_add.connect(self._on_anki_add)
