@@ -59,6 +59,7 @@ Créditos y licencia del diccionario japonés: [JMdict / EDRDG](data/japanese/RE
 
 Para crear la versión de Windows desde el código fuente, instala ambos diccionarios y ejecuta
 `powershell -ExecutionPolicy Bypass -File build-windows.ps1`. El archivo ZIP se guarda en `dist`.
+Los archivos intermedios se guardan en `build-artifacts`; ejecuta la aplicación desde `dist/Miaoyixia`.
 También puedes compilarla con GitHub Actions mediante **Windows x64 release → Run workflow**, o con una etiqueta `v*`;
 descarga el ZIP de los artefactos de esa ejecución y adjúntalo a tu versión de GitHub.
 

@@ -6,9 +6,9 @@ if (-not (Test-Path -LiteralPath $python)) { throw 'Run setup.cmd first.' }
 if ($LASTEXITCODE) { throw 'Build dependency installation failed.' }
 & $python tools/prepare_release.py
 if ($LASTEXITCODE) { throw 'Release asset preparation failed.' }
-& $python -m PyInstaller --noconfirm miaoyixia.spec
+& $python -m PyInstaller --noconfirm --workpath build-artifacts miaoyixia.spec
 if ($LASTEXITCODE) { throw 'Executable build failed.' }
-$report = Join-Path $PSScriptRoot 'build\self-test.json'
+$report = Join-Path $PSScriptRoot 'build-artifacts\self-test.json'
 $previousPlatform = $env:QT_QPA_PLATFORM
 $env:QT_QPA_PLATFORM = 'offscreen'
 $process = Start-Process -FilePath (Join-Path $PSScriptRoot 'dist\Miaoyixia\Miaoyixia.exe') -ArgumentList @('--self-test', '--report', ('"' + $report + '"')) -WindowStyle Hidden -Wait -PassThru

@@ -69,6 +69,7 @@ Japanese dictionary credits and licence: [JMdict / EDRDG](data/japanese/README.m
 
 To build the Windows release from source, install both dictionaries and run
 `powershell -ExecutionPolicy Bypass -File build-windows.ps1`. The ZIP is written to `dist`.
+Intermediate build files are stored in `build-artifacts`; run the app from `dist/Miaoyixia`.
 GitHub Actions can also build it with **Windows x64 release → Run workflow**, or a `v*` tag;
 download the ZIP from that run's artifacts and attach it to your GitHub release.
 
