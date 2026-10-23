@@ -450,8 +450,11 @@ class App(QObject):
 
     @Slot()
     def _on_retry(self) -> None:
-        """Use the same hide-and-defer flow as every other snip."""
-        self.start_snip()
+        """Reframe a watched region as a region, or retry an ordinary snip."""
+        if self._watch_active:
+            self.pin_region()
+        else:
+            self.start_snip()
 
     @Slot(object)
     def _on_reading(self, reading) -> None:
