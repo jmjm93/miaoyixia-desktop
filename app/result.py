@@ -1052,7 +1052,6 @@ class ResultWindow(QWidget):
     # --- window chrome, since there is none ---------------------------------------------
 
     def _retry(self) -> None:
-        self.hide()
         self._invalidate_translation()
         self.retry.emit()
 

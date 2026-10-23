@@ -75,6 +75,9 @@ class App(QObject):
         self.result.retry.connect(self._on_retry)
         self.result.closed.connect(self._on_result_closed)
 
+        self._snip_pending = False
+        self._windows_to_restore = []
+
         # Settings, such as they are: one JSON file beside the app, written out with the
         # defaults the first time so there is something to edit.
         self.config = app_config.load()
@@ -273,31 +276,45 @@ class App(QObject):
 
     @Slot()
     def start_snip(self) -> None:
-        if self.overlay is not None:
-            return  # already framing
+        if self.overlay is not None or self._snip_pending:
+            return
+
+        self._snip_pending = True
+
+        self._windows_to_restore = [
+            window
+            for window in (self.window, self.result)
+            if window.isVisible()
+        ]
         self._stop_watch()
 
-        # Freeze first, then show the overlay over that still. The reverse order would put the
-        # overlay in its own capture, and would let a game move under a drawn selection.
-        # The border sits over the very region being re-framed, so it would otherwise be
-        # baked into the still. Hidden for the grab and restored by _on_watch_state.
-        border_was_visible = self.border.isVisible()
-        if border_was_visible:
-            self.border.hide()
-            self.qt.processEvents()
+        for window in (self.window, self.result, self.border):
+            window.hide()
 
-        self.frame = capture.grab()
-        if border_was_visible and self.region:
-            self.border.show_over(self.region)
+        QTimer.singleShot(120, self._begin_snip)
 
-        self.overlay = SnipOverlay(self.frame)
-        self.overlay.chosen.connect(self._on_chosen)
-        self.overlay.cancelled.connect(self._on_cancelled)
-        self.overlay.start()
+    def _begin_snip(self) -> None:
+        try:
+            self.frame = capture.grab()
+            self.overlay = SnipOverlay(self.frame)
+            self.overlay.chosen.connect(self._on_chosen)
+            self.overlay.cancelled.connect(self._on_cancelled)
+            self.overlay.start()
+        except Exception as exc:
+            if self.overlay is not None:
+                self.overlay.hide()
+                self.overlay.deleteLater()
+            self.frame = None
+            self._on_cancelled()
+            self._on_failed(f"capture failed: {exc}")
+        finally:
+            self._snip_pending = False
 
     @Slot()
     def pin_region(self) -> None:
         """Snip, then keep watching whatever was framed."""
+        if self.overlay is not None or self._snip_pending:
+            return
         self._pin_next = True
         self.start_snip()
 
@@ -324,6 +341,11 @@ class App(QObject):
                 self.watcher.start(selection.rect, session=self._watch_session)
             else:
                 self._on_watch_state(self._watch_session, True)
+        for window in self._windows_to_restore:
+            if window is not self.result:
+                window.show()
+
+        self._windows_to_restore = []
 
     @Slot(int, object)
     def _on_watch_frame(self, session: int, image) -> None:
@@ -412,6 +434,9 @@ class App(QObject):
     def _on_cancelled(self) -> None:
         self.overlay = None
         self._pin_next = False
+        for window in self._windows_to_restore:
+            window.show()
+        self._windows_to_restore = []
 
     @Slot()
     def _on_result_closed(self) -> None:
@@ -425,12 +450,8 @@ class App(QObject):
 
     @Slot()
     def _on_retry(self) -> None:
-        """Reframe. Deferred by a beat, so the window is really gone before the screen freezes.
-
-        hide() only queues the compositor work; grabbing immediately would capture the result
-        window sitting on top of the very thing the user is trying to re-snip.
-        """
-        QTimer.singleShot(120, self.start_snip)
+        """Use the same hide-and-defer flow as every other snip."""
+        self.start_snip()
 
     @Slot(object)
     def _on_reading(self, reading) -> None:
