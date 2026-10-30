@@ -143,6 +143,9 @@ class AnkiClient:
     def create_deck(self, deck: str) -> int:
         return self.invoke("createDeck", deck=deck)
 
+    def add_model_field(self, model: str, name: str) -> None:
+        self.invoke("modelFieldAdd", modelName=model, fieldName=name)
+
     def gui_browse(self, query: str) -> list[int]:
         """Open Anki's Browse window on `query`, and return what it selected.
 

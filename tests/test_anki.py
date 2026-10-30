@@ -61,6 +61,66 @@ def _client(responses):
     return client, calls
 
 
+@pytest.mark.parametrize("language", ["zh", "ja"])
+@pytest.mark.parametrize("existing", [[], ["Example"], ["Example", "ExampleTranslation"]])
+def test_example_fields_created_only_when_missing(monkeypatch, language, existing):
+    config = replace(anki_config.load(_missing_path()).anki, include_example=True, audio="off")
+    card = replace(_card(sentence="Original <sentence>"), language=language)
+    translated = []
+
+    def translate(self, text, target):
+        translated.append((self.source_lang, text, target))
+        return "Translation & meaning"
+
+    monkeypatch.setattr("core.anki.export.Translator.translate", translate)
+    client, calls = _client({
+        "deckNames": [config.deck], "modelNames": [config.model],
+        "modelFieldNames": ["Hanzi", *existing], "modelFieldAdd": None, "addNote": 99,
+    })
+    add_card(client, config, card, "es")
+    fields = dict(calls)["addNote"]["note"]["fields"]
+    assert fields["Example"] == "Original &lt;sentence&gt;"
+    assert fields["ExampleTranslation"] == "Translation &amp; meaning"
+    assert translated == [("ja" if language == "ja" else "zh-CN", card.sentence, "es")]
+    assert [params["fieldName"] for action, params in calls if action == "modelFieldAdd"] == [
+        name for name in ("Example", "ExampleTranslation") if name not in existing
+    ]
+
+
+def test_translation_failure_does_not_create_fields_or_add_note(monkeypatch):
+    config = replace(anki_config.load(_missing_path()).anki, include_example=True)
+
+    def fail(*args):
+        raise ValueError("Translation unavailable")
+
+    monkeypatch.setattr("core.anki.export.Translator.translate", fail)
+    client, calls = _client({})
+    with pytest.raises(ValueError, match="Translation unavailable"):
+        add_card(client, config, _card(sentence="Example sentence"))
+    assert calls == []
+
+
+def test_new_note_type_includes_examples_without_separate_field_creation(monkeypatch):
+    config = replace(anki_config.load(_missing_path()).anki, include_example=True, audio="off")
+    fields = [*config.fields, "Example", "ExampleTranslation"]
+    client, calls = _client({
+        "deckNames": [config.deck], "modelNames": [], "createModel": None,
+        "modelFieldNames": fields, "addNote": 99,
+    })
+    add_card(client, config, _card())
+    model = dict(calls)["createModel"]
+    assert model["inOrderFields"] == fields
+    assert "{{ExampleTranslation}}" in model["cardTemplates"][0]["Back"]
+    assert not any(action == "modelFieldAdd" for action, _ in calls)
+
+
+@pytest.mark.parametrize("section", ["anki", "anki_japanese"])
+def test_example_option_requires_a_boolean(tmp_path, section):
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({section: {"include_example": "false"}}))
+    assert anki_config.load(path).error
+
+
 # --- field rendering -------------------------------------------------------------------
 
 

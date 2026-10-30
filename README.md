@@ -82,3 +82,11 @@ portions of the software. This applies to both commercial and noncommercial
 distribution; publishing your changes is not required. The software is provided without warranty.
 Third-party components and dictionary data have their own licenses; see
 [Third-party notices](THIRD_PARTY_NOTICES.md) for details.
+# Example sentences in Anki
+
+In Options, enable **Include example sentence and translation** in either Anki profile.
+New notes include the captured text in `Example` and its translation into your user
+language in `ExampleTranslation`. Missing fields are created on the selected note type
+when you add a note. The original script is preserved. Existing notes are not backfilled;
+existing card templates need `{{Example}}` and `{{ExampleTranslation}}` to display them.
+Translation must succeed before the note is added; failures can be retried.

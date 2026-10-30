@@ -115,6 +115,7 @@ TOKENS: tuple[Token, ...] = (
     ),
     Token("firstSense", "First definition", lambda c, x: escape_html(c.senses[0]) if c.senses else ""),
     Token("sentence", "Line it was read in", lambda c, x: escape_html(c.sentence)),
+    Token("sentenceTranslation", "Sentence translation", lambda c, x: escape_html(x.get("sentenceTranslation", ""))),
     Token("sentenceBold", "Line, word emboldened", sentence_with_word_bold),
     # Only reference media after the exporter has stored it successfully.
     Token("audio", "Audio", lambda c, x: f"[sound:{x['audioFilename']}]" if x.get("audioFilename") else ""),

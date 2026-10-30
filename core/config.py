@@ -27,6 +27,7 @@ DEFAULTS = {
         # Off until asked for. An add button that cannot work is worse than no button, and
         # nothing should be talking to a local HTTP port on the user's behalf unprompted.
         "enabled": False,
+        "include_example": False,
         "origin": "http://127.0.0.1:8765",
         "deck": "Mandarin::Chinese Mining",
         "model": "Chinese (Basic)",
@@ -94,6 +95,7 @@ class AnkiConfig:
     audio: str = "auto"
     tts_service: str = "google"
     tts_voice: str = "ja-JP-NanamiNeural"
+    include_example: bool = False
 
     @property
     def tag_list(self) -> list[str]:
@@ -205,6 +207,7 @@ def load(path: Path | None = None) -> Config:
                                       target_lang=merged["translation"]["target_lang"]),
         anki=AnkiConfig(
             enabled=bool(anki["enabled"]),
+            include_example=anki["include_example"],
             origin=str(anki["origin"]),
             deck=str(anki["deck"]),
             model=str(anki["model"]),
@@ -232,14 +235,14 @@ def _validate(raw) -> None:
         raise ValueError("session.user_language must be en or es")
     anki = raw.get("anki", {})
     for key, value in anki.items():
-        if key == "enabled" and not isinstance(value, bool):
-            raise ValueError("anki.enabled must be a boolean")
+        if key in ("enabled", "include_example") and not isinstance(value, bool):
+            raise ValueError(f"anki.{key} must be a boolean")
         if key == "fields":
             if not isinstance(value, dict) or not all(
                 isinstance(k, str) and isinstance(v, str) for k, v in value.items()
             ):
                 raise ValueError("anki.fields must map field names to strings")
-        elif key in DEFAULTS["anki"] and key != "enabled" and not isinstance(value, str):
+        elif key in DEFAULTS["anki"] and key not in ("enabled", "include_example") and not isinstance(value, str):
             raise ValueError(f"anki.{key} must be a string")
     for key, choices in {
         "script": ("as-read", "simplified", "traditional"),

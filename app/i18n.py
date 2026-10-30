@@ -3,6 +3,9 @@
 _language = "en"
 _seen = {}
 STRINGS = {
+    "Include example sentence and translation": "Incluir frase de ejemplo y traducción",
+    "Creates Example and ExampleTranslation fields when adding a note.": "Crea los campos Example y ExampleTranslation al añadir una nota.",
+    "Sentence translation": "Traducción de la frase",
     "General": "General", "Anki · Chinese": "Anki · Chino", "Anki · Japanese": "Anki · Japonés",
     "Enable Anki export": "Activar exportación a Anki", "AnkiConnect address": "Dirección de AnkiConnect",
     "Deck": "Mazo", "Note type": "Tipo de nota", "Tags": "Etiquetas", "Audio": "Audio",

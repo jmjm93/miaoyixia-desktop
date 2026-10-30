@@ -594,7 +594,8 @@ class App(QObject):
 
     @Slot(int, int, object)
     def _on_anki_add(self, ticket: int, index: int, card) -> None:
-        self.anki.add(ticket, index, self.config.anki_for(self.language), card)
+        self.anki.add(ticket, index, self.config.anki_for(self.language), card,
+                      "es" if getattr(self, "user_language", "en") == "es" else "en")
 
     @Slot(int, int, object)
     def _on_anki_browse(self, ticket: int, index: int, card) -> None:
