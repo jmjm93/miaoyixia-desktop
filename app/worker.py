@@ -15,7 +15,6 @@ from dataclasses import dataclass
 
 from PIL import Image
 from app.region_area import RegionArea
-from app.region import Region
 
 from PySide6.QtCore import QObject, QThread, Signal, Slot
 
@@ -45,6 +44,7 @@ class Reading:
     region: RegionArea | None = None
     language: str = ""
     user_language: str = ""
+    region_id: int = -1
 
     @property
     def empty(self) -> bool:
@@ -60,12 +60,14 @@ class Engine(QObject):
     failed = Signal(str)
     watch_finished = Signal()
     watch_failed = Signal(int, str)
+    region_failed = Signal(int, int, str)
 
     def __init__(self, language: str = "zh"):
         super().__init__()
         self.language = validate(language)
         self.user_language = "en"
         self._ocr: PPOCR | None = None
+        self._ocr_cache = {}
         self._ignored_suffixes = ()
 
     @Slot(object)
@@ -74,7 +76,10 @@ class Engine(QObject):
 
     def _engine(self) -> PPOCR:
         if self._ocr is None:
-            self._ocr = PPOCR(script=ocr_script(self.language))
+            script = ocr_script(self.language)
+            if script not in self._ocr_cache:
+                self._ocr_cache[script] = PPOCR(script=script)
+            self._ocr = self._ocr_cache[script]
         return self._ocr
 
     @Slot(str)
@@ -90,6 +95,18 @@ class Engine(QObject):
 
     def _parse(self, text):
         return read_line(text, self.language, "es") if self.user_language == "es" else read_line(text, self.language)
+
+    @Slot(object)
+    def read_context(self, request):
+        image, orientation, source, session, area, region_id, language = request
+        self.set_language(language)
+        self.read(image, orientation, source, session, area, region_id)
+
+    @Slot(object)
+    def lookup_context(self, request):
+        line, region_id, language, session, source = request
+        self.set_language(language)
+        self.lookup(line, region_id, source, session)
 
     @Slot()
     def warm(self) -> None:
@@ -110,13 +127,16 @@ class Engine(QObject):
 
     @Slot(object, object, str)
     def read(self, image: Image.Image, orientation: str | None = None, source: str = "snip",
-             session: int = 0, region: RegionArea | None = None) -> None:
+             session: int = 0, region: RegionArea | None = None, region_id: int = -1) -> None:
         started = time.perf_counter()
         try:
             reading = self._engine().read(image, orientation=orientation)
             line = dialogue_key(reading.text, self._ignored_suffixes)
             tokens = self._parse(line)
         except Exception as exc:  # noqa: BLE001
+            if region_id >= 0:
+                self.region_failed.emit(region_id, session, f"recognition failed: {exc}")
+                return
             if source == "watch":
                 self.watch_failed.emit(session, f"recognition failed: {exc}")
             else:
@@ -141,19 +161,23 @@ class Engine(QObject):
                 region=region,
                 language=self.language,
                 user_language=self.user_language,
+                region_id=region_id,
             )
         )
 
     @Slot(object)
     def read_watch(self, request) -> None:
-        image, orientation, session, region = request
         try:
-            self.read(image, orientation, "watch", session, region)
+            if len(request) == 7:
+                self.read_context(request)
+            else:
+                image, orientation, session, region = request
+                self.read(image, orientation, "watch", session, region)
         finally:
             self.watch_finished.emit()
 
     @Slot(str, int)
-    def lookup(self, line: str, region_id: int, source="edit") -> None:
+    def lookup(self, line: str, region_id: int = -1, source="edit", session=0) -> None:
         """Re-segment a line the user corrected by hand, with no re-snip.
 
         Per the extension, this is the highest-value interaction in the whole window: "recognition
@@ -164,6 +188,9 @@ class Engine(QObject):
         try:
             tokens = self._parse(line)
         except Exception as exc:  # noqa: BLE001
+            if region_id >= 0:
+                self.region_failed.emit(region_id, session, f"lookup failed: {exc}")
+                return
             self.failed.emit(f"lookup failed: {exc}")
             return
         self.lookup_done.emit(
@@ -178,6 +205,8 @@ class Engine(QObject):
                 source=source,
                 language=self.language,
                 user_language=self.user_language,
+                region_id=region_id,
+                session=session,
             ), region_id
         )
 
@@ -212,6 +241,8 @@ class EngineThread(QObject):
     request_language = Signal(str)
     request_user_language = Signal(str)
     request_locale_refresh = Signal(str)
+    request_context = Signal(object)
+    request_lookup_context = Signal(object)
 
     def __init__(self, language: str = "zh"):
         super().__init__()
@@ -228,21 +259,48 @@ class EngineThread(QObject):
         self.request_language.connect(self.engine.set_language)
         self.request_user_language.connect(self.engine.set_user_language)
         self.request_locale_refresh.connect(self.engine.refresh_locale)
+        self.request_context.connect(self.engine.read_context)
+        self.request_lookup_context.connect(self.engine.lookup_context)
         self.engine.watch_finished.connect(self._watch_finished)
         self._watch_busy = False
         self._pending_watch = None
         self._watch_session = 0
+        self._region_sessions = {}
+        self._region_pending = {}
 
         self.thread.start()
 
     # Thin wrappers so callers cannot accidentally reach past them to the slots.
-    def read(self, image: Image.Image, region: Region, orientation: str | None = None, source: str = "snip") -> None:
-        self.request_read.emit(image, orientation, source)
+    def read(self, image: Image.Image, region=None, orientation=None, source="snip") -> None:
+        if region is None:
+            self.request_read.emit(image, orientation, source)
+        else:
+            self.request_context.emit((image, orientation, source, region._watch_session,
+                                       region.rectangle, region.id, getattr(region, "language", "zh")))
 
-    def set_watch_session(self, session: int) -> None:
+    def set_watch_session(self, session: int, region_id=None) -> None:
         """Invalidate queued captures when a region is stopped or replaced."""
-        region._watch_session = session
-        region._pending_watch = None
+        if region_id is None:
+            self._watch_session = session
+            self._pending_watch = None
+        else:
+            self._region_sessions[region_id] = session
+            self._region_pending.pop(region_id, None)
+
+    def forget_region(self, region_id):
+        self._region_sessions.pop(region_id, None)
+        self._region_pending.pop(region_id, None)
+
+    def read_region_watch(self, image, region):
+        if self._region_sessions.get(region.id) != region._watch_session:
+            return
+        request = (image, None, "watch", region._watch_session, region.rectangle,
+                   region.id, region.language)
+        if self._watch_busy:
+            self._region_pending[region.id] = request
+        else:
+            self._watch_busy = True
+            self.request_watch.emit(request)
 
     def read_watch(self, image: Image.Image, session: int, region: RegionArea, orientation=None) -> None:
         if session != self._watch_session:
@@ -258,12 +316,19 @@ class EngineThread(QObject):
     def _watch_finished(self) -> None:
         self._watch_busy = False
         request, self._pending_watch = self._pending_watch, None
+        if request is None and self._region_pending:
+            key = next(iter(self._region_pending))
+            request = self._region_pending.pop(key)
         if request is not None:
             self._watch_busy = True
             self.request_watch.emit(request)
 
     def lookup(self, line: str, id: int) -> None:
         self.request_lookup.emit(line, id)
+
+    def lookup_region(self, line, region, source="edit"):
+        self.request_lookup_context.emit((line, region.id, region.language,
+                                         region._watch_session, source))
 
     def set_ignored_suffixes(self, suffixes) -> None:
         self.request_suffixes.emit(suffixes)

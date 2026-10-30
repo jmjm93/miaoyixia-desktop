@@ -17,6 +17,10 @@ class AnkiSettings(QWidget):
         self.enabled = QCheckBox(tr("Enable Anki export"))
         self.enabled.setChecked(config.enabled)
         form.addRow(self.enabled)
+        self.include_example = QCheckBox(tr("Include example sentence and translation"))
+        self.include_example.setChecked(config.include_example)
+        self.include_example.setToolTip(tr("Creates Example and ExampleTranslation fields when adding a note."))
+        form.addRow(self.include_example)
         self.inputs = {}
         for key, label in (("origin", "AnkiConnect address"), ("deck", "Deck"),
                            ("model", "Note type"), ("tags", "Tags")):
@@ -106,7 +110,8 @@ class AnkiSettings(QWidget):
             mapping[name] = self.fields.cellWidget(row, 1).currentData()
         if not mapping:
             raise ValueError(tr("Add at least one field."))
-        values.update(enabled=self.enabled.isChecked(), fields=mapping)
+        values.update(enabled=self.enabled.isChecked(), fields=mapping,
+                      include_example=self.include_example.isChecked())
         return values
 
 

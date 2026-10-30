@@ -24,6 +24,8 @@ def test_save_updates_both_anki_profiles_preserving_other_settings(qt, tmp_path)
     try:
         dialog.anki_chinese.inputs['deck'].setText('Chinese::Custom')
         dialog.anki_japanese.enabled.setChecked(True)
+        dialog.anki_chinese.include_example.setChecked(True)
+        dialog.anki_japanese.include_example.setChecked(True)
         dialog.anki_japanese.inputs['model'].setText('My Yomi')
         dialog.anki_japanese.fields.item(0, 0).setText('Term')
         dialog.accept()
@@ -31,6 +33,7 @@ def test_save_updates_both_anki_profiles_preserving_other_settings(qt, tmp_path)
         config = load(path)
         assert config.anki.deck == 'Chinese::Custom'
         assert config.anki.audio == 'off'
+        assert config.anki.include_example and config.anki_japanese.include_example
         assert config.anki_japanese.enabled and config.anki_japanese.model == 'My Yomi'
         assert config.anki_japanese.fields['Term'] == 'headword'
         assert 'Expression' not in config.anki_japanese.fields

@@ -48,6 +48,7 @@ La aplicación permanece en la bandeja del sistema al cerrar la ventana principa
 - **Idioma del usuario:** elige English o Español en Opciones para la interfaz, las definiciones y la traducción de frases. Si falta una definición en español, se muestra en inglés; Anki guarda las definiciones que aparecen en pantalla.
 - **Captura puntual · Ctrl+Shift+Space:** arrastra para dibujar un recuadro alrededor del texto que quieras leer.
 - **Observar una región · Ctrl+Shift+W:** fija una zona para leer automáticamente el texto nuevo.
+- **Varias regiones:** repite el atajo para añadir regiones independientes, cada una con su ventana de resultados, color, idioma y modo automático/manual. Reintentar cambia solo esa región; cerrar su resultado la elimina. El atajo de escaneo actualiza todas las regiones observadas y cada botón actualiza su propia región. Al iniciar una captura se ocultan las ventanas y se pausa la observación; al terminar o cancelar se restauran las demás regiones.
 - **Modo manual:** pulsa **A** en la ventana de resultados para cambiar a **M** y, después, pulsa el botón para volver a escanear o **Ctrl+Shift+R** cuando quieras una nueva lectura. Pulsa **M** para volver al modo automático.
 - **Definiciones:** haz clic en una palabra para ver su lectura y significado. Puedes editar el texto reconocido y pulsar Intro para corregirlo.
 - **Traducción:** usa el icono de traducción de la ventana de resultados para activar o desactivar la traducción en línea.
@@ -59,6 +60,7 @@ Créditos y licencia del diccionario japonés: [JMdict / EDRDG](data/japanese/RE
 
 Para crear la versión de Windows desde el código fuente, instala ambos diccionarios y ejecuta
 `powershell -ExecutionPolicy Bypass -File build-windows.ps1`. El archivo ZIP se guarda en `dist`.
+Los archivos intermedios se guardan en `build-artifacts`; ejecuta la aplicación desde `dist/Miaoyixia`.
 También puedes compilarla con GitHub Actions mediante **Windows x64 release → Run workflow**, o con una etiqueta `v*`;
 descarga el ZIP de los artefactos de esa ejecución y adjúntalo a tu versión de GitHub.
 

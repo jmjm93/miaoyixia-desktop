@@ -89,7 +89,9 @@ def test_region_toggle_can_enable_translation_when_config_default_is_off(qt):
     window = ResultWindow()
     app = SimpleNamespace(result=window, translation=Mock(), config=SimpleNamespace(
         translation=SimpleNamespace(enabled=False, target_lang="en")))
-    window.translation_requested.connect(lambda ticket, text: App._on_translation_requested(app, ticket, text))
+    app.regions = [app]
+    app._translation_target = lambda: "en"
+    window.translation_requested.connect(lambda ticket, text: App._on_translation_requested(app, app, ticket, text))
     try:
         window.show_reading(Reading("你好", [], "horizontal", False, (), 1, 1))
         app.translation.translate.assert_not_called()

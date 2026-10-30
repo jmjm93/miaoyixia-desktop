@@ -15,6 +15,36 @@ from app.region_area import RegionArea
 from app.worker import EngineThread, Reading
 
 
+def test_multiple_region_backlogs_are_bounded_and_independent():
+    worker = EngineThread()
+    requests = []
+    worker.request_watch.disconnect()
+    worker.request_watch.connect(requests.append)
+    first = SimpleNamespace(id=10, language="zh", rectangle=RegionArea(0, 0, 8, 8), _watch_session=1)
+    second = SimpleNamespace(id=20, language="ja", rectangle=RegionArea(8, 0, 8, 8), _watch_session=1)
+    try:
+        worker.set_watch_session(1, first.id)
+        worker.set_watch_session(1, second.id)
+        worker.read_region_watch("first", first)
+        for i in range(10):
+            worker.read_region_watch(f"first-{i}", first)
+            worker.read_region_watch(f"second-{i}", second)
+        assert len(requests) == 1
+        assert len(worker._region_pending) == 2
+        worker._watch_finished()
+        worker._watch_finished()
+        assert [r[0] for r in requests] == ["first", "first-9", "second-9"]
+        assert [r[-1] for r in requests] == ["zh", "zh", "ja"]
+        worker.read_region_watch("discard", first)
+        worker.read_region_watch("keep", second)
+        worker.forget_region(first.id)
+        worker._watch_finished()
+        assert requests[-1][0] == "keep"
+        assert first.id not in worker._region_sessions
+    finally:
+        worker.stop()
+
+
 @pytest.mark.parametrize("failure,invalidate", [(False, False), (True, False), (False, True)])
 def test_watch_backlog_keeps_only_the_latest_capture(failure, invalidate):
     qt = QApplication.instance() or QApplication([])
@@ -103,15 +133,17 @@ def test_watch_results_cannot_reopen_a_stopped_or_replaced_region(active, sessio
 
     image = Image.new("RGB", (8, 8))
     region = RegionArea(1, 2, 8, 8)
-    app = SimpleNamespace(language="zh", _counts={"watch": 0}, _watch_active=active, _watch_session=3,
-                          _watched_line=None, config=SimpleNamespace(watch=WatchConfig(0.35)),
-                          result=Mock(), window=Mock())
+    target = SimpleNamespace(id=1, language="zh", _watch_active=active, _watch_session=3,
+                             _watched_line=None, result=Mock(), rectangle=region)
+    app = SimpleNamespace(_counts={"watch": 0}, user_language="en", _snip_pending=False, overlay=None,
+                          _find_region=lambda key: target if key == 1 else None,
+                          config=SimpleNamespace(watch=WatchConfig(0.35)), window=Mock())
     reading = Reading("中文", [], "horizontal", False, (), 1, 1,
-                      source="watch", image=image, session=session, region=region)
+                      source="watch", image=image, session=session, region=region, region_id=1)
     App._on_reading(app, reading)
     if active and session == 3:
-        app.result.show_capture.assert_called_once_with(image, region, activate=False, reposition=False)
-        app.result.show_reading.assert_called_once_with(reading, append=True)
+        target.result.show_capture.assert_called_once_with(image, region, activate=False, reposition=False)
+        target.result.show_reading.assert_called_once_with(reading, append=True)
     else:
-        app.result.show_capture.assert_not_called()
-        app.result.show_reading.assert_not_called()
+        target.result.show_capture.assert_not_called()
+        target.result.show_reading.assert_not_called()

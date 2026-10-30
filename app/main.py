@@ -30,15 +30,13 @@ from app import capture  # noqa: E402
 from app.anki import AnkiThread  # noqa: E402
 from app.hotkey import GlobalHotkey, HotkeyError  # noqa: E402
 from app.overlay import SnipOverlay  # noqa: E402
-from app.result import ResultWindow  # noqa: E402
 from app.region_border import RegionBorder  # noqa: E402
-from app.watcher import WatcherThread  # noqa: E402
 from app import health  # noqa: E402
 from app.window import MainWindow, app_icon  # noqa: E402
 from app.worker import EngineThread  # noqa: E402
 from app.translation import TranslationThread  # noqa: E402
 from app.options import OptionsDialog  # noqa: E402
-from core.languages import LANGUAGES, validate  # noqa: E402
+from core.languages import validate  # noqa: E402
 from core.watch_text import dialogue_key  # noqa: E402
 from app.i18n import tr, localize, set_language as set_ui_language  # noqa: E402
 from app.region import Region, RegionMode
@@ -69,11 +67,13 @@ class App(QObject):
         self.qt = qt
         self.overlay: SnipOverlay | None = None
         self.frame: capture.Frame | None = None
-        self.regions: list[Region] = [];
+        self.regions: list[Region] = []
         self._next_region_id: int = 0
 
         self._reframe_region_id: int | None = None
-        self._reframe_was_active = False
+        self._snip_pending = False
+        self._windows_to_restore = []
+        self._paused_regions = []
 
         # Settings, such as they are: one JSON file beside the app, written out with the
         # defaults the first time so there is something to edit.
@@ -87,17 +87,6 @@ class App(QObject):
             # edited is how a typo becomes an hour of confusion.
             log(f"config ignored, using defaults — {self.config.error}")
 
-        self.anki = AnkiThread()
-        self.anki.anki.inspected.connect(self.result.apply_anki_states)
-        self.anki.anki.added.connect(self.result.anki_added)
-        self.anki.anki.failed.connect(self.result.anki_failed)
-        self.anki.anki.unreachable.connect(self.result.anki_unreachable)
-        
-        
-
-        self.translation = TranslationThread("ja" if self.language == "ja" else "zh-CN")
-        self.translation.worker.completed.connect(self.result.apply_translation)
-        
         # Watched, not merely read once. Without this the only way to apply an edit is to quit
         # from the tray and launch again -- and launching again while the old copy is alive is a
         # no-op by design (see _claim_single_instance), so the obvious gesture, double-clicking
@@ -112,16 +101,16 @@ class App(QObject):
         self.engine.engine.lookup_done.connect(self._on_reading)
         self.engine.engine.failed.connect(self._on_failed)
         self.engine.engine.warmed.connect(self._on_warmed)
-        self.engine.engine.watch_failed.connect(self._on_watch_failed)
+        self.engine.engine.region_failed.connect(self._on_region_failed)
 
         #: True while the next selection should be pinned rather than read once.
         self._pin_next = False
         
 
 
-        self.window = MainWindow(HOTKEY, WATCH_HOTKEY, self.border.colour, self.language)
+        self.window = MainWindow(HOTKEY, WATCH_HOTKEY, "#FFB020", self.language)
         self.window.snip_requested.connect(self.start_snip)
-        self.window.watch_toggled.connect(self.toggle_watch)
+        self.window.watch_toggled.connect(self.pin_region)
         self.window.quit_requested.connect(self.quit)
         self.window.options_requested.connect(self.show_options)
         self.window.set_ready(False)
@@ -132,7 +121,7 @@ class App(QObject):
         snip_action = QAction(f"Snip\t{HOTKEY}", menu)
         snip_action.triggered.connect(self.start_snip)
         self._watch_action = QAction(f"Watch a region	{WATCH_HOTKEY}", menu)
-        self._watch_action.triggered.connect(self.toggle_watch)
+        self._watch_action.triggered.connect(self.pin_region)
         quit_action = QAction("Quit", menu)
         quit_action.triggered.connect(self.quit)
         menu.addAction(snip_action)
@@ -154,11 +143,10 @@ class App(QObject):
         )
         self.tray.show()
         localize(self.window)
-        localize(self.result)
         self._translate_tray()
 
         self.hotkeys: list[GlobalHotkey] = []
-        for spec, slot in ((HOTKEY, self.start_snip), (WATCH_HOTKEY, self.toggle_watch),
+        for spec, slot in ((HOTKEY, self.start_snip), (WATCH_HOTKEY, self.pin_region),
                            (self.config.watch.rescan_hotkey, self.rescan_region)):
             hotkey = GlobalHotkey(spec)
             hotkey.pressed.connect(slot)
@@ -221,11 +209,12 @@ class App(QObject):
         set_ui_language(language)
         self.engine.set_user_language(language)
         localize(self.window)
-        localize(self.result)
+        for region in self.regions:
+            localize(region.result)
+            region.result.set_translation_enabled(self.config.translation.enabled, self._translation_target())
+            if region.result._translation_line:
+                self.engine.lookup_region(region.result._translation_line, region, "locale")
         self._translate_tray()
-        self.result.set_translation_enabled(self.config.translation.enabled, self._translation_target())
-        if self.result._translation_line:
-            self.engine.refresh_locale(self.result._translation_line)
         if not app_config.remember_language(self._next_language, self.config.path, language):
             log("could not save user language")
 
@@ -238,163 +227,165 @@ class App(QObject):
         if not app_config.remember_language(language, self.config.path):
             log("could not save the preferred language; applies until the app exits")
 
-    def _apply_capture_language(self, region: Region) -> None:
-        if self.language == self._next_language:
-            return
-        self.language = self._next_language
-        self.engine.set_language(self.language)
-        self.translation.set_language(self.language)
-        region.result.set_language(self.language)
-        anki_config = self.config.anki_for(self.language)
-        region.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
+    def _apply_capture_language(self, region):
+        region.result.set_language(region.language)
+        config = self.config.anki_for(region.language)
+        region.result.set_anki_enabled(config.enabled, config.deck)
 
     @Slot()
     def start_snip(self) -> None:
-        if self.overlay is not None:
-            return  # already framing
-        if self._reframe_region_id is not None:
-            region = next(
-                (region for region in self.regions if region.id == self._reframe_region_id),
-                None,
-            )
-            if region is None:
-                self._reframe_region_id = None
-                self._reframe_was_active = False
-                return
+        if self.overlay is not None or self._snip_pending:
+            return
+        self._snip_pending = True
+        windows = [self.window]
+        self._paused_regions = []
+        for region in self.regions:
+            windows.extend((region.result, region.border))
+            if region._watch_active:
+                self._paused_regions.append(region.id)
+                region.watcher.stop()
+                region._watch_session += 1
+                self.engine.set_watch_session(region._watch_session, region.id)
+        self._windows_to_restore = [window for window in windows if window.isVisible()]
+        for window in windows:
+            window.hide()
+        QTimer.singleShot(120, self._begin_snip)
 
-            # Remember the state before pausing only the region being reframed.
-            self._reframe_was_active = region._watch_active
-            region._watch_active = False
-            region.watcher.stop()
-            region.border.hide()
-            self.qt.processEvents()
+    def _begin_snip(self):
+        try:
             self.frame = capture.grab()
             self.overlay = SnipOverlay(self.frame)
             self.overlay.chosen.connect(self._on_chosen)
             self.overlay.cancelled.connect(self._on_cancelled)
             self.overlay.start()
-            return
+        except Exception as exc:
+            if self.overlay is not None:
+                self.overlay.hide()
+                self.overlay.deleteLater()
+            self.frame = None
+            self._on_cancelled()
+            self._on_failed(f"capture failed: {exc}")
+        finally:
+            self._snip_pending = False
 
-        self._stop_watch()
-
-        # Freeze first, then show the overlay over that still. The reverse order would put the
-        # overlay in its own capture, and would let a game move under a drawn selection.
-        # The border sits over the very region being re-framed, so it would otherwise be
-        # baked into the still. Hidden for the grab and restored by _on_watch_state.
-        border_was_visible = self.border.isVisible()
-        if border_was_visible:
-            self.border.hide()
-            self.qt.processEvents()
-
-        self.frame = capture.grab()
-        if border_was_visible and self.region:
-            self.border.show_over(self.region)
-
-        self.overlay = SnipOverlay(self.frame)
-        self.overlay.chosen.connect(self._on_chosen)
-        self.overlay.cancelled.connect(self._on_cancelled)
-        self.overlay.start()
+    def _restore_after_snip(self, selected=None):
+        windows, self._windows_to_restore = self._windows_to_restore, []
+        live_windows = [self.window] + [w for r in self.regions for w in (r.result, r.border)]
+        for window in windows:
+            if window in live_windows and (selected is None or window is not selected.result):
+                window.setAttribute(Qt.WA_ShowWithoutActivating, True)
+                window.show()
+        paused, self._paused_regions = self._paused_regions, []
+        for region in self.regions:
+            if region.id in paused and region._watch_active:
+                if region._mode == RegionMode.AUTOMATIC:
+                    region.watcher.start(region.rectangle, session=region._watch_session)
+                region.border.show_over(region.rectangle)
+        self._update_region_status()
 
     @Slot()
-    def pin_region(self) -> None:
-        """Snip, then keep watching whatever was framed."""
+    def pin_region(self):
+        if self.overlay is not None or self._snip_pending:
+            return
         self._pin_next = True
         self.start_snip()
 
-    # snip/resnip selected
     @Slot(object)
-    def _on_chosen(self, selection) -> None:
+    def _on_chosen(self, selection):
         reframe_id = self._reframe_region_id
-        was_active = self._reframe_was_active
-        pin_next = self._pin_next
+        pin = self._pin_next
         self.overlay = None
         self._reframe_region_id = None
-        self._reframe_was_active = False
         self._pin_next = False
-
-        if reframe_id is None:
-            region = self._create_new_region(selection.rect)
-            was_active = pin_next
-        else:
-            region = next(
-                (region for region in self.regions if region.id == reframe_id),
-                None,
-        )
+        region = self._find_region(reframe_id) if reframe_id is not None else self._create_new_region(selection.rect)
         if region is None:
+            self._restore_after_snip()
             return
-
-        self._apply_capture_language(region)
         region.rectangle = selection.rect
         region._watched_line = None
         region._watch_session += 1
-        region._watch_active = was_active
+        if reframe_id is None:
+            region._watch_active = pin
+        self.engine.set_watch_session(region._watch_session, region.id)
+        try:
+            crop = self.frame.crop(region.rectangle)
+            region.result.set_region_colour(region.colour if region._watch_active else None)
+            region.result.show_capture(crop, region.rectangle)
+            self.engine.read(crop, region)
+            region.result.set_region_mode(region._mode, region._watch_active, self.config.watch.rescan_hotkey)
+            if region._watch_active:
+                region.border.show_over(region.rectangle)
+                if region._mode == RegionMode.AUTOMATIC and region.id not in self._paused_regions:
+                    region.watcher.start(region.rectangle, session=region._watch_session)
+        except Exception as exc:
+            region.result.set_error(f"capture failed: {exc}")
+        finally:
+            self._restore_after_snip(region)
 
-        crop = self.frame.crop(region.rectangle)
-        region.result.set_region_colour(region.colour)
-        # On screen straight away, before anything has been recognised.
-        region.result.show_capture(crop, region.rectangle)
-        self.engine.read(crop, region, None)
-
-        region.result.set_region_mode(
-            region._mode, was_active, self.config.watch.rescan_hotkey,
-        )
-        if was_active:
-            region.border.show_over(region.rectangle)
-            self.engine.set_watch_session(region._watch_session)
-            if region._mode == RegionMode.AUTOMATIC:
-                region.watcher.start(region.rectangle, session=region._watch_session)
-
-    def _create_new_region(self, rect)  -> Region:
-        region = Region(self._next_region_id, rect, RegionBorder.random_colour(), RegionMode(self.config.watch.mode))
-        self._next_region_id = self._next_region_id + 1
+    def _create_new_region(self, rect):
+        colours = ("#FFB020", "#3FC7A1", "#FF6B8A", "#7C8CFF")
+        used = {r.colour for r in self.regions}
+        colour = next((c for c in colours if c not in used), RegionBorder.random_colour())
+        region = Region(self._next_region_id, rect, colour, RegionMode(self.config.watch.mode), self._next_language)
+        self._next_region_id += 1
         self.regions.append(region)
         self._setup_new_region(region)
         return region
 
+    def _find_region(self, region_id):
+        return next((r for r in self.regions if r.id == region_id), None)
 
-    @Slot(int, object)
-    def _on_watch_frame(self, session: int, image) -> None:
-        """Read only frames belonging to the current region."""
-        if self._watch_active and session == self._watch_session and self._region_mode == "automatic":
-            self.engine.read_watch(image, session, self.region)
+    def _update_region_status(self):
+        active = [r for r in self.regions if r._watch_active]
+        self.window.set_watching(False)
+        if active:
+            self.window._status.setText(tr("Watching regions") + f": {len(active)}")
+        self.tray.setToolTip(f"瞄一下 — {len(active)} regions")
 
-    @Slot()
-    def rescan_region(self) -> None:
-        if not self._watch_active or not self.region or self.overlay is not None:
+    def _on_watch_frame(self, region, session, image):
+        if (not self._snip_pending and self.overlay is None and region in self.regions
+                and region._watch_active and session == region._watch_session
+                and region._mode == RegionMode.AUTOMATIC):
+            self.engine.read_region_watch(image, region)
+
+    def rescan_region(self, region=None):
+        if self.overlay is not None or self._snip_pending:
             return
-        try:
-            image = capture.grab_region(self.region)
-        except Exception as exc:
-            self._on_failed(f"capture failed: {exc}")
+        targets = [region] if isinstance(region, Region) else list(self.regions)
+        for target in targets:
+            if target not in self.regions or not target._watch_active:
+                continue
+            try:
+                self.engine.read_region_watch(capture.grab_region(target.rectangle), target)
+            except Exception as exc:
+                target.result.set_error(f"capture failed: {exc}")
+
+    def set_region_mode(self, region, mode):
+        if region not in self.regions:
             return
-        self.engine.read_watch(image, self._watch_session, self.region)
+        region._mode = RegionMode(mode)
+        region.watcher.stop()
+        region._watch_session += 1
+        self.engine.set_watch_session(region._watch_session, region.id)
+        if region._watch_active and region._mode == RegionMode.AUTOMATIC:
+            region.watcher.start(region.rectangle, session=region._watch_session)
+        region.result.set_region_mode(region._mode, region._watch_active, self.config.watch.rescan_hotkey)
 
-    @Slot(str)
-    def set_region_mode(self, mode: str) -> None:
-        if mode == self._region_mode:
-            return
-        self._region_mode = mode
-        if self._watch_active:
-            self.watcher.stop()
-            self._watch_session += 1
-            self.engine.set_watch_session(self._watch_session)
-            if mode == "automatic":
-                self.watcher.start(self.region, session=self._watch_session)
-            self._on_watch_state(self._watch_session, True)
-        else:
-            self.result.set_region_mode(mode, False, self.config.watch.rescan_hotkey)
+    def _stop_watch(self, region):
+        region._watch_active = False
+        region._watch_session += 1
+        self.engine.set_watch_session(region._watch_session, region.id)
+        region.watcher.stop()
+        region.border.hide()
+        region.result.set_region_mode(region._mode, False, self.config.watch.rescan_hotkey)
+        self._update_region_status()
 
-    def _stop_watch(self) -> None:
-        self._watch_active = False
-        self._watch_session += 1
-        self.engine.set_watch_session(self._watch_session)
-        self.watcher.stop()
-        self._on_watch_state(self._watch_session, False)
-
-    @Slot(int, str)
-    def _on_watch_failed(self, session: int, message: str) -> None:
-        if self._watch_active and session == self._watch_session:
-            self._on_failed(message)
+    @Slot(int, int, str)
+    def _on_region_failed(self, region_id, session, message):
+        region = self._find_region(region_id)
+        if region is not None and region._watch_session == session:
+            region.result.set_error(message)
+            log(message)
 
     @Slot()
     def show_window(self) -> None:
@@ -402,123 +393,81 @@ class App(QObject):
         self.window.raise_()
         self.window.activateWindow()
 
-    @Slot(int, bool)
-    def _on_watch_state(self, session: int, watching: bool) -> None:
-        if session != self._watch_session:
+    def _on_watch_state(self, region, session, watching):
+        if region not in self.regions or session != region._watch_session:
             return
-        if watching and not self._watch_active:
-            return
-        if not watching and self._watch_active:
-            self._watch_active = False
-            self._watch_session += 1
-            self.engine.set_watch_session(self._watch_session)
-        self._watch_action.setText(tr("Stop watching" if watching else f"Watch a region\t{WATCH_HOTKEY}"))
-        self.tray.setToolTip(f"瞄一下 — {'watching' if watching else 'ready'}  ({HOTKEY})")
-        self.window.set_watching(watching, self.region if watching else None)
-        self.result.set_region_mode(self._region_mode, watching, self.config.watch.rescan_hotkey)
-        if watching and self._region_mode == "manual":
-            self.window._status.setText(tr("Manual region"))
-            self.window._status_hint.setText(tr(f"Rescan with the region button or {self.config.watch.rescan_hotkey}"))
-            self.tray.setToolTip("瞄一下 — manual region")
-
-        if watching and self.region:
-            self.border.show_over(self.region)
-            self.result.set_region_colour(self.region_colour)
-        else:
-            self.border.hide()
-            self.result.set_region_colour(None)
+        if not watching:
+            if self._snip_pending or self.overlay is not None:
+                return
+            self._stop_watch(region)
+        elif region._watch_active and not self._snip_pending and self.overlay is None:
+            region.border.show_over(region.rectangle)
+        self._update_region_status()
 
     @Slot()
-    def toggle_watch(self) -> None:
-        if self._watch_active:
-            self._stop_watch()
-        else:
-            self.pin_region()
+    def toggle_watch(self):
+        self.pin_region()
 
-    # snip/resnip canceled somehow
     @Slot()
-    def _on_cancelled(self) -> None:
-        reframe_id = self._reframe_region_id
-        was_active = self._reframe_was_active
+    def _on_cancelled(self):
         self.overlay = None
         self._pin_next = False
         self._reframe_region_id = None
-        self._reframe_was_active = False
-        if reframe_id is None:
-            return
-        region = next(
-            (region for region in self.regions if region.id == reframe_id),
-            None,
-        )
-        if region is None:
-            return
-        region._watch_active = was_active
-        region.result.show()
-        if was_active:
-            region.border.show_over(region.rectangle)
-            if region._mode == RegionMode.AUTOMATIC:
-                region.watcher.start(region.rectangle, session=region._watch_session)
+        self._snip_pending = False
+        self._restore_after_snip()
 
-    @Slot()
-    def _on_result_closed(self) -> None:
-        """Closing the window ends the watch it was showing.
-
-        The window IS the watched region's output, so leaving the watcher running behind a closed
-        window would burn CPU and hold a frame on screen with nothing to show for it. Closing is
-        the natural "I am done with this region" gesture.
-        """
-        self._stop_watch()
+    def _on_result_closed(self, region):
+        if region not in self.regions:
+            return
+        self.regions.remove(region)
+        self.engine.forget_region(region.id)
+        region.watcher.shutdown()
+        region.translation.stop()
+        region.anki.stop()
+        region.border.hide()
+        region.border.deleteLater()
+        region.result.hide()
+        region.result.deleteLater()
+        region.deleteLater()
+        self._update_region_status()
 
     @Slot(int)
-    def _on_retry(self, id_region: int) -> None:
-        if self.overlay is not None or self._reframe_region_id is not None:
+    def _on_retry(self, region_id):
+        if self.overlay is not None or self._snip_pending or self._find_region(region_id) is None:
             return
-        # snipping again a region
-        self._reframe_region_id = id_region
-        QTimer.singleShot(120, self.start_snip)
+        self._reframe_region_id = region_id
+        self.start_snip()
 
+    @Slot(object)
     @Slot(object, int)
-    def _on_reading(self, reading, region_id) -> None:
-        region = next(
-            (region for region in self.regions if region.id == region_id), 
-            None, 
-            )
-        if(region is None): return
-        if getattr(reading, "user_language", "") and reading.user_language != getattr(self, "user_language", "en"):
+    def _on_reading(self, reading, region_id=None):
+        region = self._find_region(reading.region_id if region_id is None else region_id)
+        if region is None or reading.session != region._watch_session:
             return
-        if getattr(reading, "language", "") and reading.language != self.language:
-            return  # an earlier capture finished while a new language was being selected
+        if reading.language and reading.language != region.language:
+            return
+        if reading.user_language and reading.user_language != self.user_language:
+            return
+        if self._snip_pending or self.overlay is not None:
+            return
         if reading.source == "locale":
             region.result.set_tokens(reading.tokens, preserve=True)
             return
         self._counts[reading.source if reading.source in self._counts else "edit"] += 1
         if reading.source == "watch":
-            if not self._watch_active or reading.session != self._watch_session:
+            if not region._watch_active:
                 return
-            # The text is the authority on whether anything happened. The cheap pixel gate in the
-            # watcher can only prove a region untouched, never that it changed -- so a lighting
-            # shift behind a translucent panel gets this far, and is stopped here by a text
-            # comparison. Trailing dialogue advance cursors do not reset the selected word.
-            if dialogue_key(reading.line) == dialogue_key(self._watched_line):
+            if dialogue_key(reading.line) == dialogue_key(region._watched_line):
                 return
-            self._watched_line = reading.line
-            if not reading.line:
-                return  
-            if not self.config.watch.accepts(reading.line, self.language):
-                return
-
-            region.result.show_capture(
-                reading.image, reading.region, activate=False, reposition=False
-            )
-            self.window.set_reading(reading.line)
-            region.result.show_reading(reading, append=True)
-            return
-
-        self.window.set_reading(reading.line)
-        region.result.show_reading(reading)
-        if getattr(self, "_watch_active", False):
             region._watched_line = reading.line
-        region.result._place(region.rectangle)
+            if not reading.line or not self.config.watch.accepts(reading.line, region.language):
+                return
+            region.result.show_capture(reading.image, region.rectangle, activate=False, reposition=False)
+            region.result.show_reading(reading, append=True)
+        else:
+            region.result.show_reading(reading)
+            region._watched_line = reading.line
+        self.window.set_reading(reading.line)
 
     def _setup_config_watcher(self) -> None:
         self._config_watcher = QFileSystemWatcher(self)
@@ -530,27 +479,36 @@ class App(QObject):
         self._config_watcher.directoryChanged.connect(self._on_config_directory_changed)
         self._watch_config()
 
-    def _setup_new_region(self, region: Region) -> None:
-        anki_config = self.config.anki_for(self.language)
-        region.result.edited.connect(self._on_edited) # user edited manually the OCR result
-        region.result.retry.connect(self._on_retry)  # resnip: redo the rectangle
-        region.result.closed.connect(self._on_result_closed)
-        region.result.anki_inspect.connect(self._on_anki_inspect)
-        region.result.anki_add.connect(self._on_anki_add)
-        region.result.anki_browse.connect(self._on_anki_browse)
-        region.result.set_anki_enabled(anki_config.enabled, anki_config.deck)
-        region.result.translation_requested.connect(self._on_translation_requested)
-        region.result.translation_cancelled.connect(self.translation.cancel_pending)
-        region.result.set_translation_enabled(self.config.translation.enabled,
-                                            self._translation_target())
+    def _setup_new_region(self, region):
+        region.app = self
+        result = region.result
+        region.anki = AnkiThread()
+        region.translation = TranslationThread("ja" if region.language == "ja" else "zh-CN")
+        region.anki.anki.inspected.connect(result.apply_anki_states)
+        region.anki.anki.added.connect(result.anki_added)
+        region.anki.anki.failed.connect(result.anki_failed)
+        region.anki.anki.unreachable.connect(result.anki_unreachable)
+        region.translation.worker.completed.connect(result.apply_translation)
+        result.edited.connect(self._on_edited)
+        result.retry.connect(self._on_retry)
+        result.closed.connect(lambda: self._on_result_closed(region))
+        result.anki_inspect.connect(lambda ticket, cards: region.anki.inspect(ticket, self.config.anki_for(region.language), cards))
+        result.anki_add.connect(lambda ticket, index, card: region.anki.add(ticket, index, self.config.anki_for(region.language), card))
+        result.anki_browse.connect(lambda ticket, index, card: region.anki.browse(ticket, index, self.config.anki_for(region.language), card))
+        result.translation_requested.connect(lambda ticket, text: self._on_translation_requested(region, ticket, text))
+        result.translation_cancelled.connect(region.translation.cancel_pending)
+        result.mode_changed.connect(lambda mode: self.set_region_mode(region, mode))
+        result.rescan_requested.connect(lambda: self.rescan_region(region))
+        result.set_region_mode(region._mode, False, self.config.watch.rescan_hotkey)
+        result.set_translation_enabled(self.config.translation.enabled, self._translation_target())
+        self._apply_capture_language(region)
+        localize(result)
+        region.watcher.watcher.caught_session.connect(region.on_frame)
+        region.watcher.watcher.state_session.connect(region.on_state)
 
-        region.result.mode_changed.connect(self.set_region_mode)
-        region.result.rescan_requested.connect(self.rescan_region)
-        region.result.set_region_mode(region._mode, False, self.config.watch.rescan_hotkey)
-        
-        region.watcher.watcher.caught_session.connect(self._on_watch_frame)
-        region.watcher.watcher.state_session.connect(self._on_watch_state)
-
+    def _on_translation_requested(self, region, ticket, text):
+        if region in self.regions and region.result._translation_enabled:
+            region.translation.translate(ticket, text, self._translation_target())
 
     def _watch_config(self) -> None:
         path = str(self.config.path)
@@ -585,7 +543,7 @@ class App(QObject):
             return
 
         old_watch = self.config.watch
-        old_anki = self.config.anki_for(getattr(self, "language", "zh"))
+        old_config = self.config
         old_language = self.config.session.language
         self.config = config
         if hasattr(self, "user_language") and config.session.user_language != self.user_language:
@@ -607,39 +565,31 @@ class App(QObject):
                 except HotkeyError as restore_error:
                     log(str(restore_error))
                 self.tray.showMessage("瞄一下", str(exc) + "\nUse the Rescan button.")
-        if hasattr(self, "_region_mode"):
-            if config.watch.mode != old_watch.mode:
-                self.set_region_mode(config.watch.mode)
-            self.result.set_region_mode(self._region_mode, self._watch_active,
-                                        self._rescan_hotkey.spec)
         self.engine.set_ignored_suffixes(config.watch.ignored_suffixes)
-        anki_config = config.anki_for(getattr(self, "language", "zh"))
-        self.result.set_anki_enabled(anki_config.enabled, anki_config.deck, refresh=anki_config != old_anki)
-        target = "es" if getattr(self, "user_language", "en") == "es" else "en"
-        self.result.set_translation_enabled(config.translation.enabled, target)
+        for region in getattr(self, "regions", []):
+            if config.watch.mode != old_watch.mode:
+                self.set_region_mode(region, config.watch.mode)
+            region.result.set_region_mode(region._mode, region._watch_active, config.watch.rescan_hotkey)
+            anki = config.anki_for(region.language)
+            region.result.set_anki_enabled(anki.enabled, anki.deck,
+                                           refresh=anki != old_config.anki_for(region.language))
+            region.result.set_translation_enabled(config.translation.enabled, self._translation_target())
         self._health_timer.setInterval(max(5, config.diagnostics.health_seconds) * 1000)
         log(f"config reloaded — anki {'on' if config.anki.enabled else 'off'}")
 
-    @Slot(int, object)
-    def _on_anki_inspect(self, ticket: int, cards) -> None:
-        self.anki.inspect(ticket, self.config.anki_for(self.language), cards)
 
-    @Slot(int, str)
-    def _on_translation_requested(self, ticket: int, text: str) -> None:
-        if self.result._translation_enabled:
-            self.translation.translate(ticket, text, "es" if getattr(self, "user_language", "en") == "es" else "en")
 
-    @Slot(int, int, object)
-    def _on_anki_add(self, ticket: int, index: int, card) -> None:
-        self.anki.add(ticket, index, self.config.anki_for(self.language), card)
 
-    @Slot(int, int, object)
-    def _on_anki_browse(self, ticket: int, index: int, card) -> None:
-        self.anki.browse(ticket, index, self.config.anki_for(self.language), card)
+
+
+
+
 
     @Slot(str, int)
-    def _on_edited(self, line: str, id: int) -> None:
-        self.engine.lookup(line, id)
+    def _on_edited(self, line, region_id):
+        region = self._find_region(region_id)
+        if region is not None:
+            self.engine.lookup_region(line, region)
 
     @Slot(float)
     def _on_warmed(self, ms: float) -> None:
@@ -648,20 +598,18 @@ class App(QObject):
         log(f"ready in {ms:.0f}ms")
 
     @Slot(str)
-    def _on_failed(self, message: str) -> None:
-        self.result.set_error(message)
+    def _on_failed(self, message):
+        self.window._status.setText(message)
         log(f"error: {message}")
 
-    def quit(self) -> None:
+    def quit(self):
         self._log_health()
         log("--- quitting ---")
         for hotkey in self.hotkeys:
             hotkey.unregister()
-        self.border.hide()
-        self.watcher.shutdown()
+        for region in list(self.regions):
+            self._on_result_closed(region)
         self.engine.stop()
-        self.anki.stop()
-        self.translation.stop()
         self.qt.quit()
 
 

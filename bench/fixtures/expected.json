@@ -189,6 +189,6 @@
     "script": "traditional",
     "orientation": "vertical",
     "columns": 2,
-    "note": "Mixed vertical Chinese with an upright horizontal number. RapidOCR detects both columns but returns an empty recognition for the left column. Reflowing ink bands recovers the column and keeps 298 together. Known remaining error: the trailing wave dash is omitted."
+    "note": "Vertical Chinese with an upright horizontal number. Detection finds both columns but recognition drops the left column. Reflowing ink bands recovers it and keeps 298 together. Known remaining error: the trailing wave dash is omitted."
   }
 }

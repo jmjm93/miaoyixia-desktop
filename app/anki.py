@@ -62,10 +62,10 @@ class Anki(QObject):
             return
         self.inspected.emit(ticket, result)
 
-    @Slot(int, int, object, object)
-    def add(self, ticket: int, index: int, config: AnkiConfig, card) -> None:
+    @Slot(int, int, object, object, str)
+    def add(self, ticket: int, index: int, config: AnkiConfig, card, target_lang: str = "en") -> None:
         try:
-            result = add_card(self._for(config), config, card)
+            result = add_card(self._for(config), config, card, target_lang)
         except AnkiUnreachableError as exc:
             self.unreachable.emit(ticket, str(exc))
             return
@@ -102,7 +102,7 @@ class AnkiThread(QObject):
     """
 
     request_inspect = Signal(int, object, object)
-    request_add = Signal(int, int, object, object)
+    request_add = Signal(int, int, object, object, str)
     request_browse = Signal(int, int, object, object)
 
     def __init__(self):
@@ -121,8 +121,8 @@ class AnkiThread(QObject):
     def inspect(self, ticket: int, config: AnkiConfig, cards: list) -> None:
         self.request_inspect.emit(ticket, config, list(cards))
 
-    def add(self, ticket: int, index: int, config: AnkiConfig, card) -> None:
-        self.request_add.emit(ticket, index, config, card)
+    def add(self, ticket: int, index: int, config: AnkiConfig, card, target_lang: str = "en") -> None:
+        self.request_add.emit(ticket, index, config, card, target_lang)
 
     def browse(self, ticket: int, index: int, config: AnkiConfig, card) -> None:
         self.request_browse.emit(ticket, index, config, card)

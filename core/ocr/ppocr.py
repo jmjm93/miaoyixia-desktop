@@ -232,8 +232,8 @@ class PPOCR:
             Line(text=text, score=float(score), box=np.asarray(box, dtype=float))
             for box, text, score in zip(result.boxes, result.txts, result.scores)
         ]
-        # RapidOCR removes empty recognitions, including vertical columns containing
-        # upright horizontal numbers. Keep detector geometry available for that case.
+        # RapidOCR filters empty recognitions out of its output. A vertical column
+        # containing an upright number can disappear even though detection succeeded.
         use_rec, use_cls = self._engine.use_rec, self._engine.use_cls
         try:
             detected = self._engine(image, use_rec=False, use_cls=False)
@@ -366,13 +366,12 @@ def _as_array(image):
 
 
 def _reflow_vertical(pixels):
-    """Lay separated ink bands left-to-right, keeping an inline number together."""
+    """Lay upright ink bands left-to-right, keeping inline numbers together."""
     import cv2
 
     if not pixels.size:
         return None
-    ink = pixels.min(axis=2) < 100
-    rows = np.flatnonzero(ink.any(axis=1))
+    rows = np.flatnonzero((pixels.min(axis=2) < 100).any(axis=1))
     bands = list(np.split(rows, np.where(np.diff(rows) > 1)[0] + 1))
     if not rows.size or len(bands) < 3:
         return None
@@ -381,7 +380,7 @@ def _reflow_vertical(pixels):
     i = 0
     while i < len(bands):
         band = bands[i]
-        # Disconnected strokes (e.g. 示) must remain one glyph.
+        # Keep disconnected strokes of a single glyph (e.g. 示) together.
         while (band[-1] - band[0] + 1 < height * .65 and i + 1 < len(bands)
                and bands[i + 1][-1] - band[0] + 1 <= height * 1.25):
             i += 1

@@ -52,7 +52,9 @@ def test_user_language_saved_independently(tmp_path):
 def test_spanish_translation_target():
     from app.main import App
     app = SimpleNamespace(user_language="es", result=SimpleNamespace(_translation_enabled=True), translation=Mock())
-    App._on_translation_requested(app, 1, "你好")
+    app.regions = [app]
+    app._translation_target = lambda: App._translation_target(app)
+    App._on_translation_requested(app, app, 1, "你好")
     app.translation.translate.assert_called_once_with(1, "你好", "es")
 
 
@@ -78,11 +80,13 @@ def test_user_language_change_keeps_capture_language_and_refreshes_definitions(m
         window=Mock(), result=Mock(), engine=Mock(), _translate_tray=Mock())
     app.result._translation_line = "食べました。"
     app._translation_target = lambda: App._translation_target(app)
+    region = SimpleNamespace(result=app.result, language="ja")
+    app.regions = [region]
     try:
         App.set_user_language(app, "es")
         assert app.language == "ja" and app._next_language == "zh"
         app.engine.set_user_language.assert_called_once_with("es")
-        app.engine.refresh_locale.assert_called_once_with("食べました。")
+        app.engine.lookup_region.assert_called_once_with("食べました。", region, "locale")
         assert load(path).session.user_language == "es"
     finally:
         set_language("en")

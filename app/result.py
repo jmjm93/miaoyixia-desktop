@@ -201,9 +201,11 @@ class ResultWindow(QWidget):
     mode_changed = Signal(str)
     rescan_requested = Signal()
 
-    def __init__(self, id: int, language: str = "zh"):
+    def __init__(self, id: int = -1, language: str = "zh"):
         super().__init__(None)
         from core.languages import validate
+        if isinstance(id, str):
+            language, id = id, -1
         self.id = id;
         self.language = validate(language)
         self.setWindowFlags(Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
@@ -1054,7 +1056,6 @@ class ResultWindow(QWidget):
     # --- window chrome, since there is none ---------------------------------------------
 
     def _retry(self) -> None:
-        self.hide()
         self._invalidate_translation()
         self.retry.emit(self.id)
 

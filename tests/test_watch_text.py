@@ -27,6 +27,13 @@ def test_cursor_rescans_do_not_touch_selected_definition_or_translation():
     app = SimpleNamespace(language="ja", _counts={"watch": 0}, _watch_active=True,
         _watch_session=1, _watched_line="猫です。", config=SimpleNamespace(watch=WatchConfig(0.35)),
         result=Mock(), window=Mock())
+    target = app
+    target.language = "ja"
+    target.rectangle = None
+    app._find_region = lambda key: target
+    app._snip_pending = False
+    app.overlay = None
+    app.user_language = "en"
     for line in ("猫です。 ▷", "猫です。 >", "猫です。", "猫です。▶"):
         App._on_reading(app, Reading(line, [], "horizontal", False, (), 1, 1, source="watch", session=1))
     app.result.show_capture.assert_not_called()
@@ -41,6 +48,12 @@ def test_initial_capture_sets_baseline_before_first_watch_rescan():
     from app.worker import Reading
     app = SimpleNamespace(_counts={"snip": 0}, _watch_active=True,
         _watched_line=None, result=Mock(), window=Mock(), region=None)
+    app._watch_session = 0
+    app.language = "ja"
+    app._find_region = lambda key: app
+    app._snip_pending = False
+    app.overlay = None
+    app.user_language = "en"
     App._on_reading(app, Reading("猫です。▷", [], "horizontal", False, (), 1, 1))
     assert app._watched_line == "猫です。▷"
 

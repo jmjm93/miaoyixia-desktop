@@ -18,7 +18,7 @@ for name in ('jmdict-es.sqlite3', 'README.md', 'licence.html', 'meta.json'):
 datas += [(str(root / 'README.md'), '.'), (str(root / 'README.es.md'), '.'),
           (str(root / 'LICENSE'), '.'), (str(root / 'THIRD_PARTY_NOTICES.md'), '.'),
           (str(root / 'bench/japanese/horizontal-compound.png'), 'self-test'),
-          (str(root / 'build/third-party-licenses'), 'third-party-licenses')]
+          (str(root / 'build-artifacts/third-party-licenses'), 'third-party-licenses')]
 hidden = collect_submodules('rapidocr') + collect_submodules('fugashi') + ['unidic_lite', 'edge_tts']
 datas += copy_metadata('rapidocr') + copy_metadata('edge-tts')
 a = Analysis([str(root / 'packaging/entry.py')], pathex=[str(root)], datas=datas,

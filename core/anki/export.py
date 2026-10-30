@@ -15,6 +15,7 @@ from core.anki.client import AnkiClient, ensure_target, note_options, reconcile_
 from core.config import AnkiConfig
 from core.anki.fields import build_fields
 from core.reading import Card, apply_script
+from core.translation import Translator
 
 
 def _note(config: AnkiConfig, mapping: dict[str, str], card: Card, extras: dict | None = None) -> dict:
@@ -42,7 +43,10 @@ def inspect_cards(client: AnkiClient, config: AnkiConfig, cards) -> dict:
             "states": [{"canAdd": True, "duplicate": False, "error": ""} for _ in cards],
         }
 
-    mapping = reconcile_mapping(config.fields, client.model_field_names(config.model))
+    fields = dict(config.fields)
+    if config.include_example:
+        fields.update(Example="sentence", ExampleTranslation="sentenceTranslation")
+    mapping = reconcile_mapping(fields, client.model_field_names(config.model))
     # Normalised the same way the add path will, or duplicate detection would compare a form that
     # is never written -- reporting 個 as addable when the deck already holds 个.
     notes = [_note(config, mapping, card) for card in cards]
@@ -107,12 +111,23 @@ def browse_card(client: AnkiClient, config: AnkiConfig, card: Card) -> dict:
     return {"query": queries[-1], "found": client.gui_browse(queries[-1])}
 
 
-def add_card(client: AnkiClient, config: AnkiConfig, card: Card) -> dict:
+def add_card(client: AnkiClient, config: AnkiConfig, card: Card, target_lang: str = "en") -> dict:
     """Add one note, creating the deck and note type first if they're missing."""
-    created = ensure_target(client, config.deck, config.model, config.fields)
-
-    mapping = reconcile_mapping(config.fields, client.model_field_names(config.model))
+    fields = dict(config.fields)
     extras = {}
+    if config.include_example:
+        fields.update(Example="sentence", ExampleTranslation="sentenceTranslation")
+        if card.sentence.strip():
+            translator = Translator(source_lang="ja" if card.language == "ja" else "zh-CN")
+            extras["sentenceTranslation"] = translator.translate(card.sentence, target_lang)
+    created = ensure_target(client, config.deck, config.model, fields)
+    actual_fields = client.model_field_names(config.model)
+    if config.include_example:
+        for name in ("Example", "ExampleTranslation"):
+            if name not in actual_fields:
+                client.add_model_field(config.model, name)
+                actual_fields.append(name)
+    mapping = reconcile_mapping(fields, actual_fields)
     audio_source, audio_error = "", ""
     if "audio" in mapping.values() and config.audio != "off":
         written = apply_script(card, config.script)

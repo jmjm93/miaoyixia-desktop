@@ -14,7 +14,7 @@ root = Path(__file__).resolve().parents[1]
 for filename in ('data/japanese/jmdict-es.sqlite3', 'data/spanish/gloss-es.json', 'data/dict/meta.json'):
     if not (root / filename).is_file():
         raise SystemExit(f'Missing {filename}; run the dictionary setup scripts first.')
-destination = root / 'build/third-party-licenses'
+destination = root / 'build-artifacts/third-party-licenses'
 destination.mkdir(parents=True, exist_ok=True)
 manifest = []
 for dist in importlib.metadata.distributions():

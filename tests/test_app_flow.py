@@ -690,7 +690,7 @@ def test_commit_looks_up_the_line_the_cursor_is_on(qt):
     window.show_reading(_reading("中国菜"), append=True)
 
     asked = []
-    window.edited.connect(asked.append)
+    window.edited.connect(lambda text, region_id: asked.append(text))
 
     cursor = window._log.textCursor()
     cursor.movePosition(QTextCursor.Start)

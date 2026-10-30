@@ -58,6 +58,7 @@ The app stays in the system tray when you close its main window. Choose **Quit**
 - **User language:** choose English or Español in Options for the interface, definitions, and sentence translation. Missing Spanish definitions fall back to English; Anki saves the displayed definitions.
 - **Snip once · Ctrl+Shift+Space:** drag a box around the text you want to read.
 - **Watch a region · Ctrl+Shift+W:** pin an area and read new text automatically.
+- **Multiple regions:** repeat the watch shortcut to add independent regions, each with its own result window, color, language, and automatic/manual mode. Retry reframes only that region; closing its result removes it. The rescan shortcut refreshes all watched regions, while each Rescan button refreshes its own region. Starting any snip temporarily hides all region windows and pauses watching; completing or cancelling it restores the other regions.
 - **Manual mode:** click **A** in the result window to switch to **M**, then click Rescan or press **Ctrl+Shift+R** when you want a new reading. Click **M** to return to automatic mode.
 - **Definitions:** click a word to see its reading and meaning. Edit recognized text and press Enter to correct it.
 - **Translation:** use the translation icon in the result window to turn online translation on or off.
@@ -69,6 +70,7 @@ Japanese dictionary credits and licence: [JMdict / EDRDG](data/japanese/README.m
 
 To build the Windows release from source, install both dictionaries and run
 `powershell -ExecutionPolicy Bypass -File build-windows.ps1`. The ZIP is written to `dist`.
+Intermediate build files are stored in `build-artifacts`; run the app from `dist/Miaoyixia`.
 GitHub Actions can also build it with **Windows x64 release → Run workflow**, or a `v*` tag;
 download the ZIP from that run's artifacts and attach it to your GitHub release.
 
@@ -81,3 +83,11 @@ portions of the software. This applies to both commercial and noncommercial
 distribution; publishing your changes is not required. The software is provided without warranty.
 Third-party components and dictionary data have their own licenses; see
 [Third-party notices](THIRD_PARTY_NOTICES.md) for details.
+# Example sentences in Anki
+
+In Options, enable **Include example sentence and translation** in either Anki profile.
+New notes include the captured text in `Example` and its translation into your user
+language in `ExampleTranslation`. Missing fields are created on the selected note type
+when you add a note. The original script is preserved. Existing notes are not backfilled;
+existing card templates need `{{Example}}` and `{{ExampleTranslation}}` to display them.
+Translation must succeed before the note is added; failures can be retried.

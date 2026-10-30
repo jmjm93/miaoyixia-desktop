@@ -59,25 +59,26 @@ def test_default_change_preserves_current_region_and_persists(tmp_path):
     app.engine.set_language.assert_not_called()
     app.translation.set_language.assert_not_called()
     app.result.set_language.assert_not_called()
-    App._apply_capture_language(app)
-    assert app.language == "zh"
-    app.engine.set_language.assert_called_once_with("zh")
-    app.translation.set_language.assert_called_once_with("zh")
-    app.result.set_language.assert_called_once_with("zh")
-    app.result.set_anki_enabled.assert_called_once_with(app.config.anki.enabled, app.config.anki.deck)
+    region = SimpleNamespace(language="zh", result=Mock())
+    App._apply_capture_language(app, region)
+    region.result.set_language.assert_called_once_with("zh")
+    assert app.language == "ja"  # Existing region languages do not follow the default.
+    region.result.set_anki_enabled.assert_called_once_with(app.config.anki.enabled, app.config.anki.deck)
 
 
 def test_old_language_result_cannot_replace_new_capture():
-    app = SimpleNamespace(language="zh", result=Mock(), window=Mock())
-    App._on_reading(app, SimpleNamespace(language="ja"))
-    app.result.show_reading.assert_not_called()
+    region = SimpleNamespace(id=1, language="zh", _watch_session=0, result=Mock())
+    app = SimpleNamespace(_find_region=lambda key: region, _snip_pending=False, overlay=None)
+    App._on_reading(app, SimpleNamespace(region_id=1, session=0, language="ja"))
+    region.result.show_reading.assert_not_called()
+
 
 
 def test_worker_language_change_is_queued_before_new_capture(qt, monkeypatch):
     import app.worker as module
     worker = EngineThread("ja")
     # These tests do not need a real region's widgets or watcher thread.
-    region = SimpleNamespace(id=0, rectangle=None, _watch_session=0)
+    region = SimpleNamespace(id=0, rectangle=None, _watch_session=0, language="ja")
     calls, readings = [], []
     monkeypatch.setattr(module, "read_line", lambda line, language: calls.append(language) or [])
     worker.engine._engine = lambda: SimpleNamespace(read=lambda *a, **k: SimpleNamespace(
@@ -90,7 +91,7 @@ def test_worker_language_change_is_queued_before_new_capture(qt, monkeypatch):
     timeout.timeout.connect(loop.quit)
     try:
         worker.read("first", region)
-        worker.set_language("zh")
+        region.language = "zh"
         worker.read("second", region)
         poll.start(10)
         timeout.start(2000)
